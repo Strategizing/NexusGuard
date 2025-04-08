@@ -4,8 +4,7 @@
     Version: 0.6.9
 ]]
 
--- Ensure JSON library is available (e.g., from oxmysql or another resource)
-local json = json or _G.json
+-- JSON library is expected to be provided by ox_lib (lib.json.encode/decode)
 
 -- Load the Event Registry module
 local EventRegistry = require('shared/event_registry')
@@ -225,7 +224,9 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
 
             -- Start periodic position and health update thread
             Citizen.CreateThread(function()
-                local positionUpdateInterval = 5000 -- ms (e.g., every 5 seconds)
+                -- Use configurable interval, default to 5000ms if not set in Config.Client
+                local positionUpdateInterval = (Config and Config.Client and Config.Client.PositionUpdateInterval) or 5000
+                print('^2[NexusGuard]^7 Position/Health update interval set to: ' .. positionUpdateInterval .. 'ms.')
                 while true do
                     Citizen.Wait(positionUpdateInterval)
                     -- Only send updates if initialized and token is valid
@@ -268,9 +269,24 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                 local success, detectorModule = pcall(require, filePath)
 
                 if success and type(detectorModule) == "table" then
-                    -- Initialize the detector, passing the NexusGuard instance
+                    -- Register the detector module with the central registry
+                    if _G.DetectorRegistry and type(_G.DetectorRegistry.Register) == "function" then
+                        local regSuccess, regErr = pcall(_G.DetectorRegistry.Register, detectorName, detectorModule)
+                        if not regSuccess then
+                             print("^1[NexusGuard] Error registering detector '" .. detectorName .. "' with registry: " .. tostring(regErr) .. "^7")
+                             goto continue -- Skip if registration fails
+                        else
+                             print("^2[NexusGuard]^7 Detector '" .. detectorName .. "' registered successfully.")
+                        end
+                    else
+                        print("^1[NexusGuard] CRITICAL: _G.DetectorRegistry or its Register function not found. Cannot register detector '" .. detectorName .. "'.^7")
+                        goto continue -- Skip if registry is unavailable
+                    end
+
+                    -- Initialize the detector, passing the NexusGuard instance and EventRegistry
                     if detectorModule.Initialize and type(detectorModule.Initialize) == "function" then
-                        local initSuccess, initErr = pcall(detectorModule.Initialize, self)
+                        -- Pass 'self' (NexusGuard instance) and the local EventRegistry
+                        local initSuccess, initErr = pcall(detectorModule.Initialize, self, EventRegistry)
                         if not initSuccess then
                             print("^1[NexusGuard] Error initializing detector '" .. detectorName .. "': " .. tostring(initErr) .. "^7")
                             goto continue -- Skip starting if init failed
@@ -279,11 +295,11 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                         print("^3[NexusGuard] Warning: Detector '" .. detectorName .. "' is missing an Initialize function.^7")
                     end
 
-                    -- Start the detector's main loop/thread
+                    -- Start the detector's main loop/thread (Registry might handle this now, but keep Start call for compatibility/flexibility)
                     if detectorModule.Start and type(detectorModule.Start) == "function" then
-                         local startSuccess, startErr = pcall(detectorModule.Start) -- Start should create its own thread
+                         local startSuccess, startErr = pcall(detectorModule.Start) -- Start might just set flags now, registry handles thread
                          if not startSuccess then
-                             print("^1[NexusGuard] Error starting detector '" .. detectorName .. "': " .. tostring(startErr) .. "^7")
+                             print("^1[NexusGuard] Error calling Start for detector '" .. detectorName .. "': " .. tostring(startErr) .. "^7")
                          else
                              print("^2[NexusGuard]^7 Detector '" .. detectorName .. "' started.")
                          end
@@ -299,7 +315,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                  print("^3[NexusGuard]^7 Detector '" .. detectorName .. "' disabled in config.")
             end
             ::continue:: -- Lua goto label for skipping
-            Citizen.Wait(50) -- Small delay between loading detectors
+            Citizen.Wait(0) -- Reduced delay between loading detectors
         end
         print("^2[NexusGuard]^7 Detector loading and starting process complete.")
     end
@@ -546,7 +562,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         -- Use chat resource if available and configured
         if Config and Config.Actions and Config.Actions.notifyPlayer and exports.chat then
             -- Ensure details is a string or convert it safely
-            local detailStr = type(details) == "table" and (json and json.encode(details) or "details") or tostring(details or "details")
+            local detailStr = type(details) == "table" and (lib.json and lib.json.encode(details) or "details") or tostring(details or "details")
             exports.chat:addMessage({
                 color = { 255, 0, 0 }, -- Red
                 multiline = true,
@@ -594,13 +610,13 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                     return
                 end
 
-                -- Ensure JSON library is available for decoding the response
-                if not json then
-                    print("^1[NexusGuard] JSON library not available for screenshot callback. Cannot process response.^7")
+                -- Ensure JSON library (from ox_lib) is available for decoding the response
+                if not lib.json then
+                    print("^1[NexusGuard] ox_lib JSON library (lib.json) not available for screenshot callback. Cannot process response.^7")
                     return
                 end
 
-                local success, resp = pcall(json.decode, data)
+                local success, resp = pcall(lib.json.decode, data)
                 if success and resp and resp.attachments and resp.attachments[1] and resp.attachments[1].url then
                     local screenshotUrl = resp.attachments[1].url
                     print("^2[NexusGuard] Screenshot uploaded successfully: " .. screenshotUrl .. "^7")

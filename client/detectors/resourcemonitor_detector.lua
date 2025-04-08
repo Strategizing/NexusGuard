@@ -1,6 +1,7 @@
 local DetectorName = "resourceMonitor" -- Using camelCase to match client_main interval key
 local ConfigKey = "resourceInjection" -- Key used in Config.Detectors table
 local NexusGuard = nil -- Local variable to hold the NexusGuard instance
+local LocalEventRegistry = nil -- Local variable to hold the EventRegistry instance
 
 local Detector = {
     active = false,
@@ -9,13 +10,18 @@ local Detector = {
 }
 
 -- Initialize the detector (called once by the registry)
--- Receives the NexusGuard instance from the registry
-function Detector.Initialize(nexusGuardInstance)
+-- Receives the NexusGuard instance and EventRegistry instance from the registry
+function Detector.Initialize(nexusGuardInstance, eventRegistryInstance)
     if not nexusGuardInstance then
         print("^1[NexusGuard:" .. DetectorName .. "] CRITICAL: Failed to receive NexusGuard instance during initialization.^7")
         return false
     end
+    if not eventRegistryInstance then
+        print("^1[NexusGuard:" .. DetectorName .. "] CRITICAL: Failed to receive EventRegistry instance during initialization.^7")
+        return false -- Also fail if registry isn't passed
+    end
     NexusGuard = nexusGuardInstance -- Store the instance locally
+    LocalEventRegistry = eventRegistryInstance -- Store the registry instance locally
 
     -- Update interval from global config if available
     -- Access Config via the passed instance
@@ -66,11 +72,11 @@ function Detector.Check()
     end
 
     -- Send the list to the server for verification against a whitelist/blacklist
-    -- Use EventRegistry to trigger the server event
-    if _G.EventRegistry then
-        _G.EventRegistry.TriggerServerEvent('SYSTEM_RESOURCE_CHECK', runningResources, NexusGuard.securityToken)
+    -- Use the locally stored EventRegistry to trigger the server event
+    if LocalEventRegistry then
+        LocalEventRegistry:TriggerServerEvent('SYSTEM_RESOURCE_CHECK', runningResources, NexusGuard.securityToken)
     else
-        print("^1[NexusGuard:" .. DetectorName .. "] CRITICAL: _G.EventRegistry not found. Cannot send resource list to server.^7")
+        print("^1[NexusGuard:" .. DetectorName .. "] CRITICAL: LocalEventRegistry not found. Cannot send resource list to server.^7")
     end
 
     -- Client-side doesn't typically "detect" injection directly, it reports the state for server validation.
@@ -86,14 +92,5 @@ function Detector.GetStatus()
     }
 end
 
--- Register with the detector system
--- NOTE: The registry now handles calling Initialize and Start based on config.
-Citizen.CreateThread(function()
-    -- Wait for DetectorRegistry to be available
-    while not _G.DetectorRegistry do
-        Citizen.Wait(500)
-    end
-    -- Use the ConfigKey ('resourceInjection') for registration
-    _G.DetectorRegistry.Register(ConfigKey, Detector)
-    -- Initialization and starting is now handled by the registry calling the methods on the registered module
-end)
+-- Registration is now handled centrally by client_main.lua
+-- The self-registration thread below has been removed.

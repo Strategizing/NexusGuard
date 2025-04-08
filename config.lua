@@ -210,6 +210,11 @@ Config.Performance = {
     smartDetection = true -- Context-aware detection (reduces false positives)
 }
 
+-- Client-Side Specific Settings
+Config.Client = {
+    PositionUpdateInterval = 5000 -- Interval in milliseconds for sending position/health updates to the server. Lower values increase accuracy but also network traffic.
+}
+
 -- Detection Intervals (ms) - Control CPU usage
 Config.Intervals = {
     speedHack = 2000,

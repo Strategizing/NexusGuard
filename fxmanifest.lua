@@ -17,9 +17,16 @@ client_scripts {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
-    'server/modules/*.lua',  -- Load all modular components
-    'server/server_main.lua',
-    'sql/setup.lua'
+    'globals.lua', -- Load globals first to define API table
+    'server/sv_utils.lua',
+    'server/sv_permissions.lua',
+    'server/sv_security.lua',
+    'server/sv_bans.lua',
+    'server/sv_database.lua', -- Load new database module
+    'server/sv_event_handlers.lua', -- Load new event handlers module
+    'server/modules/*.lua',  -- Load other modules (like detections)
+    'server/server_main.lua' -- Load main server logic last
+    -- 'sql/setup.lua' -- Removed, DB init handled in sv_database.lua
 }
 
 dependencies {
@@ -29,6 +36,6 @@ dependencies {
 }
 
 exports {
-    'GetNexusGuardAPI',
-    'GetCore'
+    'GetNexusGuardServerAPI' -- Export the correct function name from globals.lua
+    -- 'GetCore' -- Removed potentially unused/old export
 }

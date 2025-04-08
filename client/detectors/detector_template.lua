@@ -43,16 +43,4 @@ function Detector.StartChecking()
     end)
 end
 
-function Detector.Check()
-    -- Add detection logic here
-    return true -- No cheat detected
-end
-
--- Register with NexusGuard if enabled
-if Config.Detectors[DetectorName] then
-    AddEventHandler("NexusGuard:Initialize", function(nexusGuardObj)
-        Detector.Initialize(nexusGuardObj)
-    end)
-end
-
 return Detector

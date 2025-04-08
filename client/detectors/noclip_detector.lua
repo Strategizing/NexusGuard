@@ -47,6 +47,12 @@ end
 
 -- Check for violations (Moved logic from client_main.lua)
 function Detector.Check()
+    -- Ensure NexusGuard instance is available
+    if not NexusGuard then
+        print("^1[NexusGuard:" .. DetectorName .. "] Error: NexusGuard instance not available in Check function.^7")
+        return
+    end
+
     -- Cache config values locally
     -- Access Config via the stored NexusGuard instance
     local cfg = NexusGuard.Config
@@ -88,7 +94,7 @@ function Detector.Check()
             if not IsPedSwimming(ped) then
 
                 -- Get vertical velocity to determine if player is stationary or moving slowly upwards/downwards in air
-                local _, _, zVelocity = table.unpack(GetEntityVelocity(ped)) -- Use table.unpack for clarity
+                local _, _, zVelocity = GetEntityVelocity(ped) -- Assign multiple return values directly
                 zVelocity = zVelocity or 0
 
                 -- If player is floating relatively still vertically (not actively falling/rising from jump/explosion)
@@ -139,13 +145,5 @@ function Detector.GetStatus()
     }
 end
 
--- Register with the detector system
--- NOTE: The registry now handles calling Initialize and Start based on config.
-Citizen.CreateThread(function()
-    -- Wait for DetectorRegistry to be available
-    while not _G.DetectorRegistry do
-        Citizen.Wait(500)
-    end
-    _G.DetectorRegistry.Register(DetectorName, Detector)
-    -- Initialization and starting is now handled by the registry calling the methods on the registered module
-end)
+-- Registration is now handled centrally by client_main.lua
+-- The self-registration thread below has been removed.

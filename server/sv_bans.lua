@@ -189,7 +189,7 @@ function Bans.Unban(identifierType, identifierValue, adminName)
         elseif result and result.affectedRows == 0 then
             Log("Bans: Unban attempt for identifier: " .. fieldName .. "=" .. identifierValue .. " found no matching active ban.", 2)
         else
-            Log("^1Bans: Error during unban operation for identifier: " .. fieldName .. "=" .. identifierValue .. ". Result: " .. json.encode(result), 1)
+            Log("^1Bans: Error during unban operation for identifier: " .. fieldName .. "=" .. identifierValue .. ". Result: " .. lib.json.encode(result), 1)
         end
     end, function(err)
         Log("^1Bans: Error executing unban query for identifier: " .. fieldName .. "=" .. identifierValue .. ". Error: " .. tostring(err), 1)

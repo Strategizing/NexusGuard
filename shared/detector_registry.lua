@@ -227,14 +227,4 @@ end)
 -- from client_main.lua *after* SetNexusGuardInstance is called.
 -- The old Initialize function here is removed.
 
--- Ensure proper closing of exports block
-if isServer then
-    local resourceName = GetCurrentResourceName() -- Define resourceName here
-    exports('getStatus', function()
-        return {
-            version = "1.1.0", -- Consider linking this to fxmanifest version if possible later
-            initialized = true,
-            resourceName = resourceName
-        }
-    end) -- Close the exports call properly
-end
+-- Removed server-side exports block from shared script.

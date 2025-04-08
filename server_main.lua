@@ -238,8 +238,14 @@ function RegisterNexusGuardServerEvents()
             return
         end
         local session = PlayerSessionManager.GetSession(source) -- Get session
-        if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then NexusGuardServer.Detections.Process(source, detectionType, detectionData, session) -- Pass session
-        else Log("^1[NexusGuard] CRITICAL: ProcessDetection function not found in API! Cannot process detection from " .. playerName .. "^7", 1) end
+        if not session then Log("^1[NexusGuard] CRITICAL: Failed to get session for player " .. playerName .. " during DETECTION_REPORT. Aborting processing.^7", 1); return end -- Add session check
+
+        if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+             -- Pass the entire session object which contains metrics and other relevant data
+             NexusGuardServer.Detections.Process(source, detectionType, detectionData, session)
+        else
+             Log("^1[NexusGuard] CRITICAL: ProcessDetection function not found in API! Cannot process detection from " .. playerName .. "^7", 1)
+        end
     end)
 
     -- Resource Verification Handler (Guideline 30)

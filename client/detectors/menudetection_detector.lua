@@ -103,19 +103,6 @@ function Detector.Check()
     -- 4. Analyze registered commands/keybinds for suspicious patterns.
     --    - Could involve iterating through registered commands/keys, but might be performance-intensive.
 
-    -- Example Placeholder (Guideline 34): Check for a known suspicious global variable
-    -- Replace '_SOME_MENU_ACTIVE' with actual variable names if known menus use them.
-    -- This is highly specific to the menus you are targeting.
-    if _G._SOME_MENU_ACTIVE == true then
-        if NexusGuard and NexusGuard.ReportCheat then
-            local details = { check = "Suspicious Global Variable", variable = "_SOME_MENU_ACTIVE" }
-            NexusGuard:ReportCheat(DetectorName, details)
-        else
-            print("^1[NexusGuard:" .. DetectorName .. "]^7 Violation: Potential mod menu key combination detected (HOME + E) (NexusGuard instance unavailable)")
-        end
-        return -- Report once per combination press
-    end
-
     -- Example: F5 key (commonly used) - INPUT_FRONTEND_PAUSE_ALTERNATE (244)
     if IsControlJustPressed(0, 244) then
          if NexusGuard and NexusGuard.ReportCheat then
@@ -139,17 +126,6 @@ function Detector.Check()
     -- 4. Analyze registered commands/keybinds for suspicious patterns.
     --    - Could involve iterating through registered commands/keys, but might be performance-intensive.
 
-    -- Example Placeholder (Guideline 34): Check for a known suspicious global variable
-    -- Replace '_SOME_MENU_ACTIVE' with actual variable names if known menus use them.
-    if _G._SOME_MENU_ACTIVE == true then
-        if NexusGuard and NexusGuard.ReportCheat then
-            local details = { check = "Suspicious Global Variable", variable = "_SOME_MENU_ACTIVE" }
-            NexusGuard:ReportCheat(DetectorName, details)
-        else
-            print("^1[NexusGuard:" .. DetectorName .. "]^7 Violation: Potential mod menu detected (Suspicious Global Variable) (NexusGuard instance unavailable)")
-        end
-        return -- Report once
-    end
 end
 
 
@@ -162,13 +138,5 @@ function Detector.GetStatus()
     }
 end
 
--- Register with the detector system
--- NOTE: The registry now handles calling Initialize and Start based on config.
-Citizen.CreateThread(function()
-    -- Wait for DetectorRegistry to be available
-    while not _G.DetectorRegistry do
-        Citizen.Wait(500)
-    end
-    _G.DetectorRegistry.Register(DetectorName, Detector)
-    -- Initialization and starting is now handled by the registry calling the methods on the registered module
-end)
+-- Registration is now handled centrally by client_main.lua
+-- The self-registration thread below has been removed.

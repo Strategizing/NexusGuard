@@ -62,6 +62,12 @@ end
 -- client-side position data if needed elsewhere, but the actual cheat *detection*
 -- and reporting is handled server-side via the periodic position updates.
 function Detector.Check()
+    -- Ensure NexusGuard instance is available
+    if not NexusGuard then
+        print("^1[NexusGuard:" .. DetectorName .. "] Error: NexusGuard instance not available in Check function.^7")
+        return
+    end
+
     -- Cache config values locally
     -- Access Config via the stored NexusGuard instance
     local cfg = NexusGuard.Config
@@ -115,13 +121,5 @@ function Detector.GetStatus()
     }
 end
 
--- Register with the detector system
--- NOTE: The registry now handles calling Initialize and Start based on config.
-Citizen.CreateThread(function()
-    -- Wait for DetectorRegistry to be available
-    while not _G.DetectorRegistry do
-        Citizen.Wait(500)
-    end
-    _G.DetectorRegistry.Register(DetectorName, Detector)
-    -- Initialization and starting is now handled by the registry calling the methods on the registered module
-end)
+-- Registration is now handled centrally by client_main.lua
+-- The self-registration thread below has been removed.
