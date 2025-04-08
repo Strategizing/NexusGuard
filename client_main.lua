@@ -88,17 +88,6 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         -- Module status tracking (potentially redundant if registry handles status)
         moduleStatus = {},
 
-        -- Detection intervals (ms) - Used by detectors during their Initialize
-        intervals = {
-            godMode = 5000,
-            weaponModification = 3000,
-            speedHack = 2000,
-            teleport = 1000,
-            noclip = 1000,
-            menuDetection = 10000,
-            resourceMonitor = 15000
-        },
-
         -- Player state tracking (some state might move to specific detectors)
         state = {
             position = vector3(0, 0, 0),

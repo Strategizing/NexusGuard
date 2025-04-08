@@ -29,16 +29,6 @@ EventRegistry.events = {
     NEXUSGUARD_POSITION_UPDATE = "server:positionUpdate", -- Renamed for clarity (was client -> server)
     NEXUSGUARD_HEALTH_UPDATE = "server:healthUpdate", -- Renamed for clarity (was client -> server)
 
-    -- Client -> Server State Sync (Added based on client_main usage)
-    -- Note: These names match the old global event names used as fallbacks in client_main
-    -- Keeping them consistent during refactor, but could be renamed later.
-    -- SECURITY_REQUEST_TOKEN = "NexusGuard:RequestSecurityToken", -- Already defined above
-    -- DETECTION_REPORT = "NexusGuard:DetectionReport", -- Already defined above
-    -- SYSTEM_ERROR = "NexusGuard:ClientError", -- Already defined above
-    -- ADMIN_SCREENSHOT_TAKEN = "NexusGuard:ScreenshotTaken", -- Already defined above
-    -- NEXUSGUARD_POSITION_UPDATE = "NexusGuard:PositionUpdate", -- Already defined above
-    -- NEXUSGUARD_HEALTH_UPDATE = "NexusGuard:HealthUpdate", -- Already defined above
-
     -- Client-Side Only Events (Added based on client_main usage)
     NEXUSGUARD_CHEAT_WARNING = "NexusGuard:CheatWarning" -- Local client warning event
 }

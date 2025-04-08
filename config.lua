@@ -22,10 +22,12 @@ Config.AdminGroups = {"admin", "superadmin", "mod"} -- Groups considered admin b
 -- Example ESX groups: {"admin", "superadmin"}
 -- Example QBCore groups: {"admin", "god"} -- Or other high-level permission groups defined in your QBCore setup
 
--- !! CRITICAL !! Change this to a long, unique, random string for your server.
--- This is used by the default secure token implementation (HMAC-SHA256 via ox_lib).
--- **LEAVING THIS AS DEFAULT OR USING A WEAK SECRET WILL MAKE YOUR SERVER VULNERABLE.**
-Config.SecuritySecret = "CHANGEME_use_a_long_random_string_here" -- CRITICAL: Must be changed
+-- !! CRITICAL !! YOU MUST CHANGE THIS VALUE !!
+-- Generate a long, unique, random string (e.g., using a password manager or online generator).
+-- This secret is VITAL for securing communication between the client and server.
+-- **LEAVING THIS AS DEFAULT MAKES YOUR SERVER EXTREMELY VULNERABLE TO EXPLOITS.**
+-- Example of a strong secret (DO NOT USE THIS EXAMPLE): "p$z^8@!L#s&G*f@D9j!K3m$n&P@r*T(w"
+Config.SecuritySecret = "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" -- CRITICAL: Must be changed
 
 -- Auto Configuration (Placeholder Features)
 Config.AutoConfig = {
