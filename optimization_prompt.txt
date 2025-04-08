@@ -1,0 +1,16 @@
+I'm working on optimizing the NexusGuard anti-cheat framework for FiveM and need guidance on implementing these key improvements:
+
+1. Breaking down globals.lua into separate modular components (core.lua, detections.lua, security.lua, metrics.lua) while maintaining functionality. What's the best approach to ensure all modules can access shared data without global variables?
+
+2. Enhancing server authority for critical checks (speed, teleport, health) to reduce false positives. I specifically need help with:
+   - Implementing context-aware validation that considers player state (falling, respawning)
+   - Correlating health changes with actual damage events
+   - Properly tracking legitimate teleports from scripts
+
+3. Strengthening the security token system against replay attacks while minimizing overhead. How should I implement token tracking without memory leaks?
+
+4. Optimizing client-side detector loops to reduce resource usage. What's the best practice for adaptive check intervals based on suspicion level?
+
+5. Implementing effective ban evasion detection without database overhead. What identifiers should I prioritize?
+
+Please provide code examples for the most critical optimizations first, with clear comments explaining the changes and their benefits. I'm particularly interested in performance gains and false positive reduction.

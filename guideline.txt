@@ -1,0 +1,190 @@
+Phase 1: Foundational Security & Architecture (Prompts 1-20)
+
+Refactor globals.lua: Replace direct _G assignments for functions (_G.IsPlayerAdmin, _G.BanPlayer, etc.) with an exported API table to reduce global namespace pollution.
+Refactor client_main.lua: Remove the global _G.NexusGuard assignment and pass the NexusGuard object instance to detectors during registration or initialization.
+Refactor server_main.lua: Minimize reliance on _G.PlayerMetrics by potentially creating a dedicated player session manager module/class.
+Security Enhancement: Implement per-player, short-lived, server-generated challenge tokens for critical events instead of relying solely on the long-lived HMAC token.
+Security Enhancement: Modify ValidateSecurityToken to track used timestamps within the validity window to prevent replay attacks using the same valid token multiple times quickly.
+Security Hardening: Review all TriggerServerEvent calls in client scripts. Ensure all sensitive actions triggered by events are validated server-side using the secure token and server-side logic, not just trusting client data.
+Refactor ProcessDetection: Move server-side validation logic (like weapon damage check) out of the main ProcessDetection function into dedicated validation functions called by ProcessDetection.
+Refactor IsPlayerAdmin: Further improve framework detection logic to be more robust, potentially caching the detected framework type after the first successful check.
+Configuration: Add a Config.LogLevel setting (e.g., 0=Error, 1=Warn, 2=Info, 3=Debug) and update the Log function in globals.lua to respect it.
+Configuration: Add specific server-side thresholds to Config.Thresholds (e.g., serverSideSpeedThreshold, serverSideRegenThreshold, serverSideArmorThreshold).
+Configuration: Clarify the relationship between client (weaponDamageMultiplier) and server (WeaponBaseDamage) weapon checks in config.lua comments.
+Error Handling: Enhance pcall wrappers around critical functions (DB calls, event handlers) to log more detailed error context (e.g., player ID, event name, data involved).
+Error Handling: Implement a server-side mechanism to track frequent client errors reported via SYSTEM_ERROR and potentially flag problematic clients or detectors.
+Dependency Check: Add explicit checks in onResourceStart (server) and Initialize (client) for the existence of required exports (e.g., exports.oxmysql, lib.crypto) and log critical errors if missing.
+Code Style: Run a Lua linter (like Luacheck or StyLua) over the entire codebase and apply consistent formatting.
+Remove Placeholders: Remove the non-functional AI section (Config.AI, placeholder functions in globals.lua) or clearly mark it as non-operational and disabled by default.
+Remove Placeholders: Remove the non-functional Admin Panel and Player Reports config entries (Config.Features.adminPanel, Config.Features.playerReports) or implement basic versions.
+Remove Placeholders: Remove or implement the commented-out HandleEntityCreation logic with proper performance considerations and filtering.
+Refactor fxmanifest.lua: Remove unused file references (e.g., load.lua, discord_config.lua). Ensure dependencies are accurately listed.
+Refactor fxmanifest.lua: Clean up duplicate installation steps noted in the README (steps 6/7 were duplicated).
+Phase 2: Improving Core Detections & Server Authority (Prompts 21-50)
+
+Server Authority (Speed): Modify speedhack_detector.lua to only send position updates periodically (as implemented) and remove the client-side ReportCheat call for speed. Let the server (NEXUSGUARD_POSITION_UPDATE handler) be the sole decider for speed/teleport flags based on its calculations.
+Server Authority (Teleport): Modify teleport_detector.lua similarly to speed; remove client-side ReportCheat and rely on the server's analysis of position updates.
+Server Authority (Health): Modify godmode_detector.lua to remove client-side ReportCheat for regeneration/abnormal health/armor. Rely solely on the server's analysis in the NEXUSGUARD_HEALTH_UPDATE handler. (Client can still check GetPlayerInvincible).
+Server Authority (Weapon Clip): Modify weaponmod_detector.lua to remove the client-side ReportCheat for clip size. Add server-side validation using a new Config.WeaponBaseClipSize table (similar to damage).
+Server-Side Validation (God Mode): Enhance the NEXUSGUARD_HEALTH_UPDATE handler to correlate health values with recent server-side damage events (requires hooking/tracking damage events server-side) to detect health not decreasing when it should.
+False Positives (Speed/Teleport): Refine the server-side speed check to account for vertical speed changes (falling, parachuting) if possible using Z-axis data.
+False Positives (Speed/Teleport): Add logic to temporarily suspend server-side speed checks immediately after a player spawns or respawns.
+False Positives (Speed/Teleport): Add configuration options for the server-side speed check (serverSpeedThreshold, minTimeDiff).
+False Positives (Health): Refine server-side health regeneration check to be less sensitive or potentially ignore small increases unless persistent.
+False Positives (Resource Verification): Add more detailed logging to the resource verification check to show exactly which resource failed the check (whitelist miss or blacklist hit).
+Detection Logic (Noclip): Review noclip_detector.lua. Can its checks be made more robust or less prone to false positives from falling/ragdolling? Consider adding server-side position validation overlap.
+Detection Logic (Vehicle Mods): Review vehicle_detector.lua (if present, wasn't in initial list but often included). Implement server-side checks for vehicle mods if possible (e.g., checking max speed against known defaults in NEXUSGUARD_POSITION_UPDATE).
+Detection Logic (Explosions): Refine HandleExplosionEvent spam check. Consider checking types of explosions or distance between them.
+Detection Logic (Menu Keys): Review menudetection_detector.lua. Is it just checking common keybinds? Consider adding checks for suspicious native calls often used by menus.
+Data Handling: Standardize the detectionData format sent to ProcessDetection across all detectors (always send a table, include consistent fields like weaponHash, detectedValue, baselineValue where applicable).
+Data Handling: Update StoreDetection to handle the standardized table format consistently for JSON encoding.
+Player Metrics: Add tracking for the source of health changes (e.g., damage event, item use) server-side if possible, to improve health validation accuracy.
+Player Metrics: Track player state server-side (e.g., isFalling, isInVehicle) within PlayerMetrics based on position/health updates or other events, to provide context for server-side checks.
+Ban System: Add an UnbanPlayer function/command that removes entries from the nexusguard_bans table and reloads the cache.
+Ban System: Add optional support for identifier-specific bans (ban license only, ban IP only) instead of matching any identifier.
+Ban System: Improve ban message formatting in BanPlayer function.
+Action System: Refine IsHighRiskDetection and IsConfirmedCheat based on the improved server-side validation flags (detectionData.serverValidated).
+Action System: Make the trust score impact (severityImpact in ProcessDetection) more configurable per detection type, potentially with separate values for client vs. server-validated flags.
+Action System: Implement the progressiveResponse logic based on repeated confirmed detections stored in PlayerMetrics or the database.
+Performance: Analyze the frequency and payload size of NEXUSGUARD_POSITION_UPDATE and NEXUSGUARD_HEALTH_UPDATE. Consider adaptive intervals or batching updates if performance becomes an issue.
+Performance: Evaluate database query performance, especially LoadBanList. Ensure necessary table indexes exist (sql/schema.sql).
+Performance: Optimize loops within client detector Check functions where possible.
+Refactor globals.lua: Break down the massive globals.lua into smaller, more focused server-side modules (e.g., sv_bans.lua, sv_security.lua, sv_player_metrics.lua, sv_actions.lua).
+Refactor server_main.lua: Move large event handler logic (like resource verification) into separate functions or modules called by the handlers.
+Refactor client_main.lua: Move core class methods into separate files if the class becomes too large.
+Phase 3: Feature Enhancements & New Detections (Prompts 51-80)
+
+New Detection (Heuristics): Implement basic server-side heuristic checks (e.g., impossible headshot rates over time, abnormal event frequencies like weapon firing rate).
+New Detection (Heuristics): Track suspicious sequences of actions (e.g., teleport -> kill -> teleport).
+New Detection (Server-Side): Add server-side detection for spawning entities (vehicles, peds, objects) by hooking relevant server events/natives if possible, comparing against Config.Thresholds.
+New Detection (Spectate): Add detection for players entering spectator mode without authorization.
+New Detection (Freecam): Improve freecam_detector.lua (if present) - often difficult, might involve checking camera states or unusual player visibility changes.
+New Detection (Network Events): Add monitoring for abuse of specific, sensitive network events (e.g., triggering money events, admin actions without permission). Requires identifying target events.
+New Detection (Resource Start/Stop): Add server-side monitoring for players attempting to stop required client resources or start blacklisted ones after the initial check.
+Feature: Implement basic Admin Panel UI using framework natives or a web UI, allowing admins to view recent detections, player trust scores, and potentially trigger actions (kick/ban/screenshot).
+Feature: Implement basic Player Report system (/report command) that logs reports to Discord and/or database for admin review.
+Feature: Add temporary bans (using durationSeconds in BanPlayer and respecting expire_date in IsPlayerBanned).
+Feature: Add a /nexusguard_lookup [player_id] command for admins to view a player's detection history and trust score.
+Feature: Add a /nexusguard_clearwarnings [player_id] command for admins.
+Feature: Implement detailed server-side logging of why a specific server-side check failed (e.g., "Speed check failed: 60m/s > 50m/s threshold").
+Feature: Add configuration option to disable specific server-side checks (e.g., disable server health regen check if causing issues).
+Feature: Implement basic detection synchronization between clients (e.g., if multiple clients detect the same player noclipping simultaneously, increase confidence). (Complex).
+Feature: Add support for exporting ban lists to common formats (e.g., EasyAdmin, framework bans).
+Feature: Add support for importing bans from other formats during initialization (Config.AutoConfig.importBanList).
+Feature (Advanced): Explore basic Lua injection detection (e.g., monitoring LoadResourceFile, PerformHttpRequest usage client-side for suspicious patterns, checking script environments). Very difficult.
+Feature (Advanced): Explore basic memory modification detection (e.g., checking integrity of common natives or game code sections). Extremely difficult and prone to instability/updates.
+Discord Bot: Implement the actual Discord bot commands listed in Config.Discord.bot.commands.available using a library like discord.js/discord.py, interacting with the server via secure API calls or events.
+Discord Bot: Implement the player report handling via the Discord bot as configured.
+Discord Bot: Implement the server status notifications.
+Configuration: Add comments explaining why certain default thresholds are set as they are.
+Configuration: Group related config options more logically (e.g., all speed-related thresholds together).
+Configuration: Add in-game command (admin-only) to reload Config.lua settings without restarting the resource (carefully handle which settings can be reloaded live).
+Configuration: Validate Config.lua values on startup (e.g., check types, ranges) and log warnings/errors for invalid settings. (Implement shared/config_validator.lua).
+Server Authority: Modify screenshot logic to be triggered server-side based on confirmed flags, rather than relying on client report -> server request -> client upload loop where possible.
+Server Authority: Track player weapon inventory server-side to validate ammo counts or weapon existence reported by client events.
+Server Authority: If hooking damage events server-side, use that as the primary trigger for health validation, rather than just periodic checks.
+Heuristics: Track player K/D ratios over short periods to flag statistically improbable streaks.
+Phase 4: Usability, Documentation & Testing (Prompts 81-100)
+
+Documentation: Create a GitHub Wiki or dedicated documentation site.
+Documentation: Add detailed guides to the Wiki/Docs on tuning each detector's thresholds with examples.
+Documentation: Add a guide explaining the security model (HMAC tokens, server validation points) and its limitations.
+Documentation: Document the database schema (sql/schema.sql) clearly.
+Documentation: Explain the PlayerMetrics structure and how trust score is calculated/affected.
+Documentation: Provide clear examples for setting up permissions for different frameworks (ace, esx, qbcore) in the README/Wiki.
+Documentation: Add a section on common false positive scenarios and how to address them.
+Documentation: Document the /nexusguard_getresources command usage clearly in the README.
+Documentation: Add inline code comments (LuaDoc style) to all major functions explaining parameters, return values, and purpose.
+Testing: Implement a basic Lua unit testing framework (like Busted).
+Testing: Write unit tests for key helper functions (e.g., FormatDuration, permission checks if refactored).
+Testing: Write unit tests for the EventRegistry functionality.
+Testing: Write integration tests for client-server event communication and validation logic (requires a test environment setup).
+Testing: Create specific test cases (tools/test_cases.lua?) to trigger various detections intentionally for validation.
+Usability: Improve formatting of admin notifications (chat messages, Discord embeds) for clarity.
+Usability: Add command suggestions/autocomplete for NexusGuard commands if using a compatible chat resource.
+Usability: Provide clearer feedback to admins when actions (ban/kick) succeed or fail.
+Refactor: Ensure all debug print statements are removed or guarded by the Config.LogLevel.
+Community: Add a CONTRIBUTING.md file outlining contribution guidelines.
+Release Prep: Update the version number in fxmanifest.lua and create release notes summarizing changes before tagging a new release.
+
+
+
+
+
+
+
+
+
+
+## Effective Prompt Suggestions
+
+
+Phase 1: Stabilization & Verification
+
+Read globals.lua: Get the current, potentially corrupted content.
+Fix globals.lua Syntax (Minimal): Use replace_in_file with very precise blocks targeting only the lines reported with syntax errors (e.g., IsHighRisk, IsConfirmedCheat, Unban). Focus solely on fixing syntax, not adding logic yet. Repeat if necessary.
+Read server_main.lua: Get the current, potentially corrupted content.
+Fix server_main.lua Syntax (Minimal): Use replace_in_file to fix any syntax errors reported, likely near the end where commands were added.
+Verify globals.lua (Read): Read the file again to confirm syntax fixes persisted.
+Verify server_main.lua (Read): Read the file again to confirm syntax fixes persisted.
+Test Server Start: Ask the user to restart the server and report any console errors specifically from NexusGuard startup (globals.lua, server_main.lua, config.lua, fxmanifest.lua).
+Refactor _G.OnlineAdmins: Remove the _G.OnlineAdmins usage. Modify server_main.lua to pass the local OnlineAdmins table to NexusGuardServer.EventHandlers.NotifyAdmins or manage it within the NexusGuardServer API table itself.
+Refactor _G.PlayerMetrics: Remove the _G.PlayerMetrics usage. Manage this table within the NexusGuardServer API table in globals.lua and access it via the API in server_main.lua.
+Refactor _G.EventRegistry: Modify shared/event_registry.lua to export its functions. Update client_main.lua and server_main.lua to import and use the exported functions instead of _G.EventRegistry.
+
+
+Phase 2: Core Functionality & Validation
+
+Verify Ban/Unban Logic: Read globals.lua again. Use replace_in_file to ensure NexusGuardServer.Bans.Execute and NexusGuardServer.Bans.Unban are correctly defined and syntactically sound (using the verified content from step 5 as the SEARCH base if possible).
+Verify Command Logic: Read server_main.lua again. Use replace_in_file to ensure the /nexusguard_ban and /nexusguard_unban commands correctly call the API functions (NexusGuardServer.Bans.Execute, NexusGuardServer.Bans.Unban).
+Test Ban Command: Ask the user to test /nexusguard_ban [playerid] 0 Test Ban.
+Test Unban Command: Ask the user to test /nexusguard_unban license [player_license].
+Implement Server-Side Teleport Validation: Add logic to NexusGuardServer.Detections.Process (or a new function called by it) in globals.lua to validate teleport distance based on PlayerMetrics position history. Use replace_in_file.
+Implement Server-Side NoClip Validation: Add logic to NexusGuardServer.Detections.Process (or a new function) in globals.lua to validate NoClip based on position/ground Z history. Use replace_in_file.
+Refine ServerSpeedCheck: Modify the NEXUSGUARD_POSITION_UPDATE handler in server_main.lua to better account for vertical velocity (e.g., ignore checks if GetEntityVelocity Z > threshold). Use replace_in_file.
+Refine ServerHealthRegenCheck: Modify the NEXUSGUARD_HEALTH_UPDATE handler in server_main.lua to add a cooldown or check if the player recently used a med item (requires framework integration or generic event). Use replace_in_file.
+Standardize resourceInjection Data: Update resourcemonitor_detector.lua to report data as { injectedResource = "resource_name" }.
+Standardize explosionSpam Data: Update globals.lua (HandleExplosion) to process detections with { count = recentCount, period = "10s" }. Use replace_in_file.
+
+
+Phase 3: Enhancements & New Detections
+
+Add HandleWeaponDamage Event: Register weaponDamageEvent in server_main.lua and create a handler NexusGuardServer.EventHandlers.HandleWeaponDamage in globals.lua.
+Implement Headshot Rate Heuristic: In HandleWeaponDamage, track headshots vs total shots per player in PlayerMetrics. Add logic to ProcessDetection or a timer to check for impossible rates.
+Implement Abnormal Event Frequency: Enhance HandleExplosion to track frequency over a longer period or different thresholds. Add similar logic for other potentially spammable events if identified.
+Add Vehicle Health Detector: Create client/detectors/vehicle_health_detector.lua checking GetVehicleEngineHealth / GetVehicleBodyHealth against reasonable limits.
+Add Server-Side Vehicle Health Validation: Add logic to ProcessDetection in globals.lua to validate vehicle health reports.
+Add Blacklisted Component Detector: Create client/detectors/blacklisted_component_detector.lua checking GetPedWeaponComponentType for disallowed components (list in config.lua).
+Add Server-Side Component Validation: Add logic to ProcessDetection in globals.lua to validate component reports against Config.BlacklistedComponents.
+Implement HandleEntityCreation: Add basic logging (level 3) of created entity models/types in globals.lua.
+Add Config.LogEntityCreations: Add this boolean to config.lua.
+Update HandleEntityCreation: Make logging conditional based on Config.LogEntityCreations.
+Implement Blacklisted Entity Spawn Detection: Add Config.BlacklistedEntities table to config.lua. Modify HandleEntityCreation to check created entities against this list and report via ProcessDetection.
+Add Max Health/Armor Change Detector: Modify godmode_detector.lua to track GetPedMaxHealth/GetEntityMaxHealth and GetPedMaxArmour and report unexpected increases as a new detection type (e.g., maxStatModification).
+Add Server-Side Max Stat Validation: Add logic to ProcessDetection to handle maxStatModification.
+Add Spectate Mode Detector: Create client/detectors/spectate_detector.lua checking NetworkIsInSpectatorMode().
+Add Server-Side Spectate Handling: Add logic to ProcessDetection to log or flag spectate mode usage.
+Refine Resource Monitor: Modify resourcemonitor_detector.lua to request the whitelist/blacklist from the server upon initialization instead of using potentially outdated client-side config. Add a server event to provide this.
+Add Server Command: /nexusguard_trustscore [player_id]: Implement a command in server_main.lua for admins to check a player's current trust score from PlayerMetrics.
+Add Server Command: /nexusguard_detections [player_id]: Implement a command to show recent detections for a player from PlayerMetrics or the database.
+Add Server Command: /nexusguard_kick [player_id] [reason]: Implement an admin kick command using DropPlayer.
+Add Server Command: /nexusguard_screenshot [player_id]: Implement an admin command to trigger a screenshot request via the client event.
+
+
+Phase 4: Documentation & Polish
+
+Expand Troubleshooting: Add detailed steps for common framework permission issues (ESX groups, QBCore permissions) to README.md.
+Expand Troubleshooting: Add steps for diagnosing ox_lib crypto errors.
+Create Wiki Structure: Set up basic GitHub Wiki pages (Home, Installation, Configuration, Detectors, Adding Detectors, Troubleshooting, Commands).
+Populate Wiki: Installation: Copy/expand installation steps from README.
+Populate Wiki: Configuration: Detail key sections of config.lua (Permissions, Security, Thresholds, Resource Verification).
+Populate Wiki: Detectors: Briefly explain each included detector and its purpose.
+Populate Wiki: Commands: Document all /nexusguard_ commands.
+Review Logging: Ensure all Log() calls use appropriate levels (0-Error, 1-Warn, 2-Info, 3-Debug) and provide clear messages.
+Code Cleanup: Review all files for commented-out old code, unnecessary waits, or potential micro-optimizations.
+Final Compatibility Test: Ask the user to test on a clean server setup with only NexusGuard and its required dependencies (oxmysql, ox_lib, screenshot-basic) to ensure no core errors exist.
+- "How can I improve the detection accuracy for vehicle modifications without increasing false positives?"
+- "What's the best way to handle player teleports that might be legitimate (e.g., from script teleports)?"
+- "How should I structure the ban database to support multiple server instances?"
+- "What encryption method is best for secure client-server communication in FiveM?"
+- "How can I detect memory modifications without triggering false positives from legitimate mods?"

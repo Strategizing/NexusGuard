@@ -1,0 +1,229 @@
+﻿Open-Source Anti-Cheat Resources for FiveM: An Investigative Report
+Introduction
+FiveM has emerged as a prominent platform for users to engage in customized multiplayer experiences within the Grand Theft Auto V environment. This popularity, however, brings forth the challenge of maintaining a fair and equitable gameplay environment, as the potential for malicious activities and cheating becomes a significant concern. To address these issues, anti-cheat solutions are vital for the FiveM community, aiming to detect and prevent unauthorized modifications and exploits that could undermine the integrity of the game. This report endeavors to explore the landscape of open-source anti-cheat resources specifically designed for the FiveM platform. The objective is to analyze the features, implementation approaches, and licensing terms of these resources, thereby providing a comprehensive overview for individuals, such as the user, who are interested in leveraging these tools for personal coding projects. By examining the available open-source options, this report seeks to lay the groundwork for understanding existing anti-cheat mechanisms and their potential application in new development endeavors.
+Analysis of "FiniAC" Research
+The initial research focused on identifying resources related to "FiniAC" with the expectation that it would be an anti-cheat solution for FiveM. However, a review of the provided snippets 1 reveals that "FiniAC" in the context of these results pertains to a different domain altogether. Snippets such as 1 describe Apache Fineract as open-source software for financial services, designed to create a cloud-ready core banking system. Similarly, the Fintech Open Source Foundation (FINOS) is highlighted in 2 as a community focused on creating open-source solutions for the financial services industry. Mentions of financial freedom through open source 3 and certifications for open-source developers in financial services 4 further solidify this focus. Even projects like Firefly III 5, which is a free and open-source personal finance manager, fall within the financial domain. The State of Open Source in Financial Services report by FINOS 6 and discussions around open-source large language models in finance 7 reinforce that the term "FiniAC" in these snippets refers to initiatives within the financial technology sector. Likewise, repositories like financial-freedom 8 and discussions on open-source personal finance applications 9 are clearly aligned with financial management rather than game security. Therefore, it becomes evident that the research query for "FiniAC open source" has, in this instance, directed towards open-source projects and resources within the financial domain, which are not relevant to the user's specific need for a FiveM anti-cheat solution. This necessitates a shift in focus towards the research conducted using terms more directly associated with game security and FiveM.
+Catalog of Open-Source FiveM Anti-Cheat Projects
+Further investigation into the research material, specifically using search terms like "FiveM anti cheat GitHub," has identified several GitHub repositories that present themselves as open-source anti-cheat solutions for the FiveM platform.11 These projects offer a potential starting point for understanding existing anti-cheat implementations. Among these, sasAC 11 is described as an anti-cheat for the FiveM framework. Masterfloh/Fivem-Anticheat 12 is presented as a free-to-use open-source option intended as a learning template. SnepCnep/FiveM-AntiCheat 13 is advertised as an open-source anti-cheat for FiveM, optimized for GTA Roleplay servers. GoblinAC 15 is introduced as a FiveM anti-cheat module specifically designed to protect server triggers. anticheese-anticheat 16 is identified as a FiveM anti-cheat actively fighting against cheaters. IcarusAdvancedAnticheat 18 is described as an open-source anti-cheat developed for FiveM. Finally, NSAC 19 is presented as a simple anti-cheat for FiveM, currently in beta.
+It is important to note that while most of these projects are listed with descriptions suggesting an open-source nature, there are exceptions. PegasusAC 14 is advertised as the "Most Secure and Reliable Anticheat Solution for FiveM in 2025," but the snippet explicitly states that it is not open source due to concerns about unauthorized resale. Similarly, snippets 17 and 20 mention RuxoAC as a "FiveM Free Anticheat System" and direct users to fiveguard.net for a paid anti-cheat solution. While RuxoAC is described as free, the snippets do not definitively confirm its open-source status or provide a direct link to a public repository for code inspection.
+To provide a clearer overview of the identified projects, the following table summarizes the initial findings:
+Table 1: Identified FiveM Anti-Cheat Projects (Initial)
+Project Name
+	Repository/Source
+	Open-Source Status (Based on Snippet)
+	sasAC
+	GitHub - sAsPeCt488/sasAC
+	Yes
+	Masterfloh/Fivem-Anticheat
+	GitHub - Masterfloh/Fivem-Anticheat
+	Yes
+	SnepCnep/FiveM-AntiCheat
+	GitHub - SnepCnep/FiveM-AntiCheat
+	Yes
+	PegasusAC
+	GitHub - NiaouBreGatoula/PegasusAC
+	No
+	GoblinAC
+	GitHub - Triscuit2311/GoblinAC
+	Yes
+	anticheese-anticheat
+	GitHub - Blumlaut/anticheese-anticheat
+	Yes
+	RuxoAC
+	Mentioned in snippets, repository not directly linked
+	Potentially, but not clearly established
+	IcarusAdvancedAnticheat
+	GitHub - EinS4ckZwiebeln/IcarusAdvancedAnticheat
+	Yes
+	NSAC
+	GitHub - nertigel/NSAC
+	Yes
+	This initial catalog provides a foundation for further investigation into the features and implementation details of these potentially open-source anti-cheat solutions for FiveM.
+In-Depth Examination of Selected Projects
+To gain a deeper understanding of the available open-source anti-cheat resources, a more detailed examination of several promising projects is necessary. Based on the initial catalog, sasAC, Masterfloh/Fivem-Anticheat, SnepCnep/FiveM-AntiCheat, GoblinAC, anticheese-anticheat, IcarusAdvancedAnticheat, and NSAC appear to be viable candidates for closer scrutiny.
+sasAC
+sasAC is presented as an anti-cheat solution for the FiveM framework, offering a range of features designed to enhance server security.11 Key functionalities include LUA injection detection, which requires adding a specific client script to the fxmanifest.lua file of all resources.11 The system also allows for blacklisting of weapons, vehicles, Steam names (with anti-XSS capabilities), events, and console commands, all configurable through the config/config.lua file.11 Furthermore, sasAC incorporates explosion detection, a VPN-proxy blocker (with an ACE permission for staff bypass), anti car kick, anti spectate, anti godmode, anti infinite reload, and anti give/remove weapons functionalities. For enhanced server management, it provides Discord integration via webhooks and integrates with FiveM-Bansql for ban management. Additionally, it supports ACE integration for moderator bypass. The implementation of sasAC involves both client-side and server-side LUA scripting, with installation requiring cloning the repository, placing the sasAC folder in the server's resource directory, and adding start sasAC to the server.cfg file. Configuration is primarily done through the config folder, with separate files for general settings (config.lua) and Discord webhooks (config/sconfig.lua). The comprehensive set of features offered by sasAC suggests a well-developed project that could provide significant insights into anti-cheat mechanisms for FiveM. The integration with external services and the detailed configuration options indicate a thoughtful design aimed at addressing various aspects of cheating within the platform.
+Masterfloh/Fivem-Anticheat
+The Masterfloh/Fivem-Anticheat project is explicitly described as a free-to-use open-source anti-cheat intended to serve as a learning template for developers.12 The creator emphasizes that while it is provided to the community without charge to foster fair play, it might not be actively maintained or updated. The primary purpose is to offer a foundational codebase from which developers can learn about anti-cheat mechanisms, game security protocols, and coding practices relevant to the FiveM environment. Users are encouraged to modify and adapt the code to address evolving cheat methods. This project is licensed under the GPL-3.0 license, which grants users the freedom to run, study, share, and modify the software, while also requiring that any modifications or distributions are also licensed under GPL-3.0 or a compatible license. While the lack of active maintenance might mean it is not effective against the latest cheats, its value as an educational resource for understanding the basic principles of anti-cheat in FiveM is significant. The GPL-3.0 license ensures that any learning or adaptations derived from this project can be further shared within the open-source community under similar terms.
+SnepCnep/FiveM-AntiCheat
+SnepCnep/FiveM-AntiCheat is presented as an open-source anti-cheat system specifically optimized for GTA Roleplay servers.13 The project claims to utilize the latest detection technologies and emphasizes its speed and efficiency.13 A complete list of its features can be found in the features.md file within the repository, and installation instructions are detailed in the installation.md file. The project is currently in beta, and the developers encourage users to report any bugs or feature requests by creating an issue on the repository.13 The license for this project is the GNU General Public License 13, which, similar to GPL-3.0, is a copyleft license ensuring that the software and its derivatives remain free and open-source. The focus on "latest detection methods" suggests that this project might be more up-to-date in its approach to combating cheats compared to projects that are no longer actively maintained. The provision of detailed documentation in separate files for features and installation indicates a well-organized project that could be easier to understand and potentially contribute to.
+GoblinAC
+GoblinAC distinguishes itself by primarily focusing on preventing the exploitation of event triggers within FiveM servers.15 It achieves this by restructuring the communication between client and server scripts, proxying all event triggers through a more secure channel.15 This ensures that server scripts only accept events initiated by the server, effectively stopping the common TriggerServerEvent(...) exploitation method.15 The system involves a client-side component that acts as an event proxy and a server-side component that handles the decoding and validation of these proxied events using a system of keys that are regularly issued and expired. This approach aims to make it significantly harder for cheaters to trigger unauthorized events on the server. GoblinAC is licensed under the MIT License 15, which is a permissive open-source license allowing for broad use, modification, and distribution, provided that the copyright notice and permission notice are included. The unique approach of GoblinAC to anti-cheat, by focusing on the underlying event system rather than specific cheat signatures, offers a valuable alternative perspective on game security. The MIT license provides considerable flexibility for incorporating and adapting its concepts into other projects.
+anticheese-anticheat
+The anticheese-anticheat system for FiveM is designed to work in conjunction with EasyAdmin, indicating it might function as an extension or add-on to this existing administration framework.16 A key feature is its three-strike ban system, where a player accumulating three strikes will be automatically banned using EasyAdmin's ban functionalities. It also includes checks for speedhacking, although these might not always result in a ban.21 The system offers Discord webhook alerts to notify administrators of detected cheating. For additional security, it provides an optional ac_scramble command to counter injectors that might block client-side events. Specific anticheat components can be enabled or disabled using the anticheese:SetComponentStatus function, and there is an option to grant certain players or groups the ability to bypass the anticheat checks. The project is released under the Unlicense license 16, which is essentially a public domain dedication, granting maximum freedom to use, modify, and distribute the code without any obligations. The dependency on EasyAdmin suggests that this anti-cheat system is tailored for servers already utilizing this framework. The Unlicense license offers the greatest flexibility for incorporating its features into a personal project without licensing restrictions.
+IcarusAdvancedAnticheat
+IcarusAdvancedAnticheat is presented as a robust and server-sided open-source anti-cheat solution for FiveM servers.18 It boasts a diverse range of detections aimed at catching cheaters, including checks for aimbots, clear tasks, entity creation, explosions, weapon manipulation (giving/removing), godmode, particle effects, illegal peds, super jump, tazer mods, illegal weapons, damage modifiers, noclip, projectiles, fire, and folding. Additionally, it includes checks for no VPN usage, bad words, forbidden names, and blacklisted events. Installation involves downloading the latest release, extracting it into the server's /resources/ directory, and carefully adjusting all configuration files.18 It also provides a permission setup using ACE to allow specific players to bypass all anticheat detections.18 Icarus Advanced Anticheat is licensed under the GPL-3.0 license.18 The extensive list of features indicates a comprehensive approach to anti-cheat, targeting a wide array of potential exploits. The GPL-3.0 license requires that any derivative works also be released under a compatible open-source license.
+NSAC
+NSAC (Nertigel's Simple Anti-Cheat) is described as a straightforward anti-cheat system for FiveM, currently in beta.19 Its features include detection for spectating, health cheats, damage multipliers, invisibility, unknown resource starts, current resource stops, resource injection, and framework-specific checks (configurable for None, ESX, or vRP). It also includes a Discord webhook feature. NSAC is released under the MIT License 19, which is a permissive license allowing for use, modification, and distribution with the condition that the original copyright and permission notice are included. The description as a "simple" anti-cheat might suggest a more accessible codebase for understanding the fundamental principles of anti-cheat in FiveM. The MIT license offers flexibility for incorporating and adapting its features into other projects.
+Licensing Considerations for Personal Use
+When considering the use of open-source anti-cheat projects for a personal coding project, understanding the implications of their respective licenses is crucial. The identified projects utilize several common open-source licenses, each with its own set of permissions and obligations.
+The GPL-3.0 license, under which sasAC, Masterfloh/Fivem-Anticheat, and IcarusAdvancedAnticheat are released, is a "copyleft" license. This means that while users have the freedom to use, modify, and distribute the software, any derivative works or modifications must also be licensed under the GPL-3.0 or a compatible license. This ensures that the open-source nature of the original software is preserved in any adaptations. For a personal coding project, if the user intends to incorporate code from GPL-licensed projects, they should be aware that their own project might also need to be released under a GPL-compatible license if it includes substantial parts of the original code.
+The MIT License, used by GoblinAC and NSAC, is a more permissive license. It allows users e and permission notice are included in all copies or substantial portions of the software. This license offers greater flexibility as it does not impose the same "copyleft" requirement as the GPL, making it easier to incorporate MIT-licensed code into projects with different licensing schemes, including proprietary ones, although it's generally good practice to maintain the open-source spirit.
+The Unlicense, under which anticheese-anticheat is released, is essentially a public domain dedication. By choosing the Unlicense, the authors have waived all copyright and related rights to the software, allowing it to be used, modified, and distributed for any purpose, without any obligations or restrictions. This license provides the maximum freedom for incorporating the code into a personal project without any licensing concerns.
+Therefore, when selecting which open-source anti-cheat resources to utilize or draw inspiration from, the user should carefully consider the licensing terms associated with each project and how these terms align with their goals for their personal coding project. The choice of license for the user's own project will be influenced by the licenses of any incorporated code, particularly if "copyleft" licenses like GPL-3.0 are involved.
+Conceptual Insights from Other Open-Source Anti-Cheat Initiatives
+While the primary focus is on FiveM anti-cheat solutions, examining open-source anti-cheat projects or concepts from other gaming platforms can offer valuable conceptual references and alternative implementation strategies.23
+UltimateAntiCheat 23 is an open-source usermode anti-cheat built in C++ for general game hacking detection on Windows. Its goals include serving as an educational and research tool, employing various detection and prevention techniques. Although not specific to FiveM (which primarily uses Lua), the underlying principles and detection methods discussed in this project, such as anti-debugging and anti-tampering techniques, could offer conceptual insights applicable to game security in general.
+In the realm of Minecraft server security, discussions around anti-cheat coding 26 highlight the importance of packet analysis and client-side checks. While the network protocols and client-server interactions differ between Minecraft and FiveM, the fundamental idea of monitoring and validating game data transmitted between the client and server could be relevant.
+The concept of a Linux-native kernel-level anti-cheat 27 suggests a more system-level approach to security, leveraging features like UEFI Secure boot and TPM remote attestation. While implementing a kernel-level anti-cheat might be beyond the scope of a personal project focused on FiveM scripting, understanding the potential benefits and complexities of such approaches can be informative.
+Discussions on anti-cheat in open-source games 30 reference a GPL-licensed Quake anti-cheat implementation, which utilized server-side verification of client actions. This underscores a fundamental principle in anti-cheat development: relying on the server as the authoritative source for game state and validating client inputs to prevent cheating.
+Finally, the mention of AI-based approaches for detecting enemies in Valorant 32, although not explicitly open-source, points towards the potential future of anti-cheat systems that go beyond signature-based detection to analyze player behavior and identify anomalies.
+The following table summarizes these broader concepts:
+Table 2: Open-Source Anti-Cheat Concepts from Other Platforms
+
+
+Platform/Game
+	Anti-Cheat Concept/Project
+	Snippet ID
+	General (Windows)
+	UltimateAntiCheat (C++ usermode anti-cheat)
+	23
+	Minecraft
+	Packet Analysis and Client-Side Checks
+	26
+	Linux Gaming
+	Kernel-Level Anti-Cheat Concepts
+	27
+	Open-Source Games (Quake)
+	Server-Side Verification
+	30
+	Valorant
+	AI-Based Behavior Analysis (Conceptual, not open-source)
+	32
+	These examples from other platforms illustrate a range of approaches to anti-cheat, from usermode detection techniques to server-authoritative models, which can provide valuable conceptual inspiration for a FiveM anti-cheat project.
+General Principles and Challenges in Anti-Cheat Development
+Examining forum discussions and articles provides insights into the overarching principles and inherent challenges associated with developing effective anti-cheat systems.33 A recurring theme is the importance of server-side validation.34 By having the server authoritatively manage critical game states and verify client actions, the potential for client-side cheats to manipulate the game in an unauthorized manner is significantly reduced. FiveM itself encourages server owners to build secure server-side code to prevent abuse by cheats.34
+Another significant challenge is the continuous "arms race" between cheat developers and anti-cheat measures.35 As anti-cheat systems become more sophisticated, so too do the methods employed by cheaters to bypass these protections. This necessitates a constant cycle of updates and adaptations to maintain effectiveness. The fact that cheat providers often quickly find ways to circumvent new anti-cheat measures, regardless of whether bans are immediate or in waves, highlights this ongoing battle.39
+The discussion around paid versus free anti-cheat solutions 36 suggests that the effectiveness of an anti-cheat system might be more dependent on its implementation and configuration than its cost. Some community members argue that well-configured free anti-cheat options can be superior to obfuscated paid solutions, especially because server owners have full control over the code and can tailor it to their specific server scripts.36
+Ethical considerations also arise, particularly with more invasive anti-cheat methods like kernel-level implementations.41 While these approaches can offer deeper system surveillance to detect cheats, they also raise concerns about privacy and the extent of access granted to anti-cheat software on a user's computer.
+The ease with which some anti-cheat systems can be bypassed, such as the example of GTA Online's anti-cheat being circumvented by spoofing tokens 40, underscores the complexity of designing robust and resilient security measures. It emphasizes the need for a multi-layered approach that combines various detection techniques and preventative measures.
+Ultimately, developing an effective anti-cheat system is an ongoing process that requires a deep understanding of both game mechanics and potential exploits, as well as a commitment to continuous monitoring and updates. Community collaboration and the sharing of knowledge and resources, as encouraged by FiveM 34, can play a vital role in collectively outsmarting cheat developers.
+FiveM-Specific Security Landscape
+The FiveM platform, with its reliance on Lua scripting for server-side and client-side modifications, presents a unique environment for anti-cheat development.11 One common attack vector in FiveM is LUA injection, where malicious scripts are injected into the game client to gain unfair advantages. Detecting and preventing this is a key feature of some open-source anti-cheat solutions like sasAC, which includes specific mechanisms for this purpose.11 A basic method to counter simple LUA injection involves disabling client-side scripting on the server.43
+Another critical aspect of FiveM security is the handling of server and client events. Cheaters often exploit vulnerabilities in how these events are triggered and processed to perform unauthorized actions. GoblinAC directly addresses this by implementing an event proxy system to ensure that only server-authorized events are executed.15 FiveM's own documentation emphasizes the importance of correctly registering event handlers in Lua, using AddEventHandler for same-context events and RegisterNetEvent for cross-context events, to prevent security vulnerabilities.47
+Framework-specific anti-cheat solutions, such as esx_anticheat, demonstrate the need to consider the specific server setup.44 This particular resource offers features like banning users for superjumping or using blacklisted vehicles, stripping blacklisted weapons, and deleting blacklisted props, indicating an integration with the ESX framework.
+Beyond specific cheat detection methods, general best practices for configuring anti-cheat in FiveM include optimizing resource usage by setting balanced check intervals, disabling unnecessary detection modules, and using event-based rather than loop-based detection to minimize server load.42 Implementing server-side validation for critical game actions like player coordinates, health values, and weapon inventory changes is also crucial.42 Furthermore, combining multiple anti-cheat solutions can provide a more robust defense, as no single anti-cheat can detect all types of cheats.42
+The FiveM community actively engages in discussions about anti-cheat strategies and shares resources, as seen in forum threads where users seek recommendations and discuss the effectiveness of various solutions.36 This collaborative environment can be a valuable asset for anyone looking to develop or implement anti-cheat measures for their FiveM server.
+Conclusion and Recommendations
+The exploration of open-source anti-cheat resources for FiveM has revealed a diverse landscape of projects offering various features and implementation approaches. While the initial research into "FiniAC" led to results unrelated to game security, the search for "FiveM anti cheat GitHub" yielded several promising open-source projects, including sasAC, Masterfloh/Fivem-Anticheat, SnepCnep/FiveM-AntiCheat, GoblinAC, anticheese-anticheat, IcarusAdvancedAnticheat, and NSAC. These projects employ different strategies, from comprehensive feature sets and blacklist functionalities to unique approaches like proxying event triggers.
+The licensing terms associated with these projects vary, with GPL-3.0 imposing "copyleft" requirements, MIT License offering more permissive usage rights, and Unlicense providing maximum freedom through public domain dedication. Understanding these licenses is crucial for the user's personal coding project, as they will dictate how the code can be used and distributed.
+Conceptual insights from anti-cheat initiatives on other platforms, such as general-purpose anti-cheat in C++, packet analysis in Minecraft, and server-side verification in Quake, offer broader perspectives on game security principles that can be valuable in the FiveM context.
+General principles in anti-cheat development, such as the importance of server-side validation and the ongoing "arms race" with cheat developers, underscore the complexity and continuous nature of this endeavor. The FiveM-specific security landscape highlights the relevance of addressing LUA injection and event exploitation, leveraging server-side scripting capabilities, and engaging with the active community for shared knowledge and resources.
+For the user's personal coding project, the following recommendations are offered:
+1. Begin with In-Depth Code Analysis: Start by selecting one or two of the more comprehensive and actively maintained open-source projects, such as sasAC or IcarusAdvancedAnticheat, for detailed code examination. Focus on understanding their core detection mechanisms, overall architecture, and how they interact with the FiveM framework.
+2. Explore Alternative Approaches: Investigate GoblinAC's unique approach to event trigger protection. This could provide valuable insights into alternative anti-cheat architectures that move beyond traditional detection methods.
+3. Pay Close Attention to Licensing: Carefully review the licensing terms of any code that is intended to be used or adapted. Choose projects whose licenses align with the goals and intended licensing of the personal project.
+4. Leverage FiveM-Specific Security Best Practices: Emphasize server-side validation in the personal project's design. Secure the handling of client and server events, and consider common attack vectors like LUA injection.
+5. Engage with the Community: Explore the FiveM community forums and discussions for additional insights, best practices, and potential collaboration opportunities. The shared knowledge within the community can be invaluable.
+6. Embrace Iteration and Continuous Learning: Recognize that anti-cheat development is an ongoing process. Be prepared to continuously learn, adapt, and update the anti-cheat mechanisms as new cheats and exploits emerge.
+7. Consider Contributing Back: If significant improvements or new features are developed as part of the personal project, consider contributing them back to the original open-source projects to benefit the broader community.
+By following these recommendations, the user can effectively leverage the wealth of information available in the open-source FiveM anti-cheat community to inform and advance their personal coding project.
+
+
+Instructions for FiveGem
+Your Identity: You are FiveGem, an AI assistant specialized in the FiveM modification framework for Grand Theft Auto V. Your core expertise lies in Lua scripting within the FiveM environment.
+Your Purpose: To assist developers, scripters, and server owners of all skill levels in understanding, creating, troubleshooting, and optimizing FiveM resources using Lua.
+Main Objectives:
+Educate: Explain FiveM concepts, Lua syntax, and best practices relevant to FiveM scripting.
+Assist: Help users write, understand, and debug their Lua code for FiveM resources.
+Solve: Provide solutions, code examples, and troubleshooting steps for common FiveM Lua scripting problems.
+Guide: Offer guidance on resource structure, performance optimization, and interaction between client-side and server-side scripts.
+Clarify: Demystify FiveM natives, events, exports, and the overall client-server architecture.
+Core Capabilities:
+Lua Scripting for FiveM:Explain Lua syntax, data types, control structures, and functions specifically as used in FiveM.
+Provide examples of common Lua patterns used in FiveM scripting (loops, tables, event handlers).
+Help debug Lua errors, interpret stack traces, and suggest fixes.
+FiveM API & Natives:Explain the purpose and usage of common FiveM natives (functions provided by the platform).
+Provide examples of how to correctly call natives on both the client and server.
+Clarify the difference between client-side and server-side natives.
+Event Handling:Explain FiveM's event system (client-to-server, server-to-client, client-to-client, server-to-server).
+Show how to register, trigger, and handle custom and built-in events using Lua.
+Help debug issues related to events not triggering or data not being passed correctly.
+Resource Development:Explain the structure of a FiveM resource (fxmanifest.lua / __resource.lua, client/server scripts, shared scripts, NUI).
+Explain the purpose and syntax of the manifest file.
+Provide guidance on organizing code within a resource.
+Client-Server Interaction:Explain the fundamental differences between client-side and server-side code.
+Demonstrate how to securely pass data between client and server using events.
+Advise on which logic should reside on the client versus the server.
+NUI (Web UI) Interaction:Explain how Lua scripts can interact with NUI (HTML/JS/CSS front-ends) using SendNUIMessage and RegisterNUICallback.
+Provide basic examples of sending data to the UI and receiving events/data back from it in Lua.
+Database Interaction (Conceptual):Explain the concept of interacting with databases (like MySQL) from server-side Lua scripts, typically via wrapper resources (e.g., mysql-async, oxmysql).
+Provide example syntax for common database operations (SELECT, INSERT, UPDATE, DELETE) using popular wrappers, but clarify that the specific implementation depends on the chosen wrapper resource.
+Optimization & Best Practices:Offer advice on writing efficient Lua code (avoiding unnecessary loops, optimizing resource usage).
+Discuss common pitfalls and anti-patterns in FiveM scripting.
+Explain concepts like server/client performance impact (resmon).
+Response Style:
+Knowledgeable & Accurate: Provide information based on standard FiveM practices and Lua principles. Clearly state when something is a common convention versus a strict requirement.
+Clear & Structured: Use clear language. Break down complex topics into smaller, understandable parts. Utilize headings, bullet points, and code blocks effectively.
+Practical & Code-Oriented: Focus on actionable advice. Provide well-commented Lua code examples whenever relevant. Ensure code blocks are correctly formatted as Lua. 
+-- Example Lua code block format
+RegisterNetEvent('yourResource:yourEventName', function(data)
+    -- Ensure this is server-side if handling sensitive logic
+    if GetInvokingResource() ~= 'yourResource' then -- Basic security check example
+        print('Warning: Event triggered by unexpected resource: ' .. GetInvokingResource())
+        return
+    end
+    print('Received data: ' .. tostring(data))
+    -- Your logic here...
+end)
+Context-Aware: Ask clarifying questions if the user's request is ambiguous (e.g., "Are you working on a client script or a server script?").
+Helpful & Patient: Be prepared to explain basic concepts to beginners and delve into more complex topics for experienced users.
+Focused: Primarily stick to FiveM and Lua. If related topics arise (like JavaScript for NUI, SQL), address them in the context of their interaction with Lua in FiveM.
+Cautious with Frameworks: Acknowledge popular frameworks (like ESX, QBCore) if mentioned by the user, but try to provide solutions using base FiveM API/Lua where possible, unless the question is specifically about a framework function. State clearly if a solution is framework-dependent.
+Up-to-Date Awareness: While your knowledge is based on your training data, acknowledge that FiveM is actively developed. Avoid presenting outdated information as current fact if possible. Refer to official FiveM documentation principles when appropriate.
+Primarily use https://docs.fivem.net/docs/ for reference
+
+
+
+
+Works cited
+1. Apache Fineract®, accessed April 7, 2025, https://fineract.apache.org/
+2. FINOS, Fintech Open Source Foundation, accessed April 7, 2025, https://www.finos.org/
+3. You can get your financial freedom with open-source in 2025! - DEV Community, accessed April 7, 2025, https://dev.to/nevodavid/you-can-get-your-financial-freedom-with-open-source-in-2025-41i8
+4. FINOS Financial Services Certified Open Source Developer (FSOSD), accessed April 7, 2025, https://training.linuxfoundation.org/certification/finos-open-source-developer-fsosd/
+5. Firefly III - A free and open source personal finance manager, accessed April 7, 2025, https://www.firefly-iii.org/
+6. 2024 State of Open Source in Financial Services - Finos, accessed April 7, 2025, https://www.finos.org/state-of-open-source-in-financial-services-2024
+7. FinGPT: Open-Source Financial Large Language Models! Revolutionize We release the trained model on HuggingFace. - GitHub, accessed April 7, 2025, https://github.com/AI4Finance-Foundation/FinGPT
+8. serversideup/financial-freedom: An open source alternative to Mint, YNAB, and more. Stay on budget and build wealth without sacrificing your privacy. - GitHub, accessed April 7, 2025, https://github.com/serversideup/financial-freedom
+9. Experiences with open source personal finance applications : r/selfhosted - Reddit, accessed April 7, 2025, https://www.reddit.com/r/selfhosted/comments/1e4w6bm/experiences_with_open_source_personal_finance/
+10. Maybe: Open-source personal finance app : r/selfhosted - Reddit, accessed April 7, 2025, https://www.reddit.com/r/selfhosted/comments/1955366/maybe_opensource_personal_finance_app/
+11. sasAC - An Anticheat for the FiveM Framework. - GitHub, accessed April 7, 2025, https://github.com/sAsPeCt488/sasAC
+12. Masterfloh/Fivem-Anticheat: Explore my free-to-use open ... - GitHub, accessed April 7, 2025, https://github.com/Masterfloh/Fivem-Anticheat
+13. SnepCnep/FiveM-AntiCheat: OpenSource AntiCheat for ... - GitHub, accessed April 7, 2025, https://github.com/SnepCnep/FiveM-AntiCheat
+14. NiaouBreGatoula/PegasusAC: The Most Secure and Reliable Anticheat Solution for FiveM in 2025 - GitHub, accessed April 7, 2025, https://github.com/NiaouBreGatoula/PegasusAC
+15. Triscuit2311/GoblinAC: FiveM Anti-Cheat Module to protect your server triggers. - GitHub, accessed April 7, 2025, https://github.com/Triscuit2311/GoblinAC
+16. Blumlaut/anticheese-anticheat: the FiveM anticheat ... - GitHub, accessed April 7, 2025, https://github.com/Blumlaut/anticheese-anticheat
+17. turangarusso/RuxoAC: A FiveM Free Anticheat - GitHub, accessed April 7, 2025, https://github.com/turangarusso/RuxoAC
+18. EinS4ckZwiebeln/IcarusAdvancedAnticheat: Open source anticheat developed for FiveM., accessed April 7, 2025, https://github.com/EinS4ckZwiebeln/IcarusAdvancedAnticheat
+19. nertigel/NSAC: Simple Anti-Cheat for FiveM [beta] - GitHub, accessed April 7, 2025, https://github.com/nertigel/NSAC
+20. KKonaNN/PixelAnticheat: even some of his files where missing and the ac team didnt finish sending him so i remade them - GitHub, accessed April 7, 2025, https://github.com/KKonaNN/PixelAnticheat
+21. ac_config.lua - Blumlaut/anticheese-anticheat - GitHub, accessed April 7, 2025, https://github.com/Blumlaut/anticheese-anticheat/blob/master/ac_config.lua
+22. [FREE] [STANDALONE] Icarus Anticheat - FiveM Releases - Cfx.re Community, accessed April 7, 2025, https://forum.cfx.re/t/free-standalone-icarus-anticheat/4968639
+23. AlSch092/UltimateAntiCheat: UltimateAnticheat is an open ... - GitHub, accessed April 7, 2025, https://github.com/AlSch092/UltimateAntiCheat
+24. Shedding some light on anti-cheat effectiveness, dev "laziness" and risk management., accessed April 7, 2025, https://www.reddit.com/r/linux_gaming/comments/1huo7pq/shedding_some_light_on_anticheat_effectiveness/
+25. Best Open Source Game Mods 2025 - SourceForge, accessed April 7, 2025, https://sourceforge.net/directory/game-mods/
+26. How to Develop an Anti-Cheat - GitHub Gist, accessed April 7, 2025, https://gist.github.com/Snowiiii/2c306f3e8926bc7fb8acaaa8c3c105d7
+27. Would an open source kernel level anticheat be ethic and viable? : r/linux_gaming - Reddit, accessed April 7, 2025, https://www.reddit.com/r/linux_gaming/comments/1axk0p1/would_an_open_source_kernel_level_anticheat_be/
+28. Mobile Game Modding Using Dynamic Code Injection & Memory Editing - Appdome, accessed April 7, 2025, https://www.appdome.com/dev-sec-blog/mobile-game-modding-using-dynamic-code-injection-memory-editing/
+29. Is there a way to only permit open-source mods for my video game to stop people from stealing code or at least enforce proper attribution?, accessed April 7, 2025, https://opensource.stackexchange.com/questions/13762/is-there-a-way-to-only-permit-open-source-mods-for-my-video-game-to-stop-people
+30. Topic - Anti-cheat in open-source games • Programming - FreeGameDev Forums, accessed April 7, 2025, https://forum.freegamedev.net/viewtopic.php?f=3&t=4388
+31. Irdeto reveals new DRM scheme to prevent game modding - [H]ard|Forum, accessed April 7, 2025, https://hardforum.com/threads/irdeto-reveals-new-drm-scheme-to-prevent-game-modding.2030085/
+32. How to Bypass Anti-Cheat Like a Game Hacking Pro! - YouTube, accessed April 7, 2025, https://m.youtube.com/watch?v=Of_JnlMvyzk&pp=ygULI2J5cGFzc2xpbms%3D
+33. Anti-Cheat Release : Visionary - Community Resources - Developer Forum | Roblox, accessed April 7, 2025, https://devforum.roblox.com/t/anti-cheat-release-visionary/3235037?page=8
+34. Resource FAQ - Cfx.re Docs, accessed April 7, 2025, https://docs.fivem.net/docs/support/resource-faq/
+35. Anti-Cheat implementation - How does it work? : r/gamedev - Reddit, accessed April 7, 2025, https://www.reddit.com/r/gamedev/comments/1bkw49t/anticheat_implementation_how_does_it_work/
+36. Anti Cheat what should i choose? 2024 - Discussion - Cfx.re ..., accessed April 7, 2025, https://forum.cfx.re/t/anti-cheat-what-should-i-choose-2024/5245096
+37. Implementing Anti-Cheat - C++ - Unreal Engine Forum, accessed April 7, 2025, https://forums.unrealengine.com/t/implementing-anti-cheat/3592
+38. I am creating an anticheat, how can I test it? - Discussion - Cfx.re Community, accessed April 7, 2025, https://forum.cfx.re/t/i-am-creating-an-anticheat-how-can-i-test-it/5002249
+39. Valve has the worst Anti-Cheat ever. :: VAC Discussion - Steam Community, accessed April 7, 2025, https://steamcommunity.com/discussions/forum/1/541907867784173647/
+40. GTA Online Anti-Cheat has already been bypassed by modders : r/linux_gaming - Reddit, accessed April 7, 2025, https://www.reddit.com/r/linux_gaming/comments/1fkmia3/gta_online_anticheat_has_already_been_bypassed_by/
+41. On Easy Anti-Cheat - A Petition To The Community - Sea of Thieves, accessed April 7, 2025, https://www.seaofthieves.com/community/forums/topic/166834/on-easy-anti-cheat-a-petition-to-the-community/1
+42. How to Configure AntiCheat for Optimal Performance in FiveM - Programming Insider, accessed April 7, 2025, https://programminginsider.com/how-to-configure-anticheat-for-optimal-performance-in-fivem/
+43. 16: Garry's Mod Lua Tutorial - Anti-Cheat Convar Checker - YouTube, accessed April 7, 2025, https://www.youtube.com/watch?v=gdsmpUuOaOo
+44. esx_anticheat/README.md at master - GitHub, accessed April 7, 2025, https://github.com/schwim0341/esx_anticheat/blob/master/README.md
+45. How To Fix Most EasyAntiCheat Launch Errors (2025) - YouTube, accessed April 7, 2025, https://www.youtube.com/watch?v=-aYy5IaEyas
+46. D3sTeptu/ultimateAC: The most advanced free anticheat created for FiveM Server Security - GitHub, accessed April 7, 2025, https://github.com/D3sTeptu/ultimateAC
+47. Secure your events - Cfx.re Docs, accessed April 7, 2025, https://docs.fivem.net/docs/developers/server-security/
+48. SOLVED Easy Anti Cheat + LightingService.exe (AURA SYNC) using PlayNite - Reddit, accessed April 7, 2025, https://www.reddit.com/r/playnite/comments/iabsdn/solved_easy_anti_cheat_lightingserviceexe_aura/
+49. NotSomething0/Valkyrie: Open source FiveM anticheat - GitHub, accessed April 7, 2025, https://github.com/NotSomething0/Valkyrie
+50. [Security] Anti Trigger Client Events - FiveM Releases - Cfx.re Community, accessed April 7, 2025, https://forum.cfx.re/t/security-anti-trigger-client-events/5025914
