@@ -408,8 +408,13 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         if health < 0 then health = 0 end
 
         local coords = GetEntityCoords(ped)
-        local streetHash, _ = GetStreetNameAtCoord(coords.x, coords.y, coords.z)
-        local streetName = (streetHash ~= 0 and GetStreetNameFromHashKey(streetHash)) or "Unknown Location"
+        local streetName = "Unknown Location" -- Default value
+        if coords then -- Check if coords is not nil
+            local streetHash, _ = GetStreetNameAtCoord(coords.x, coords.y, coords.z)
+            if streetHash ~= 0 then
+                streetName = GetStreetNameFromHashKey(streetHash)
+            end
+        end
 
         -- Format presence text (Example - Consider making this configurable)
         local details = string.format("ID: %s | HP: %s%%", serverId, health) -- Top line
