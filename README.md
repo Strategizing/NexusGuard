@@ -1,4 +1,4 @@
-# NexusGuard - Modular FiveM Anti-Cheat Framework (v0.6.9)
+# NexusGuard - Modular FiveM Anti-Cheat Framework (v0.7.0)
 
 NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM servers. It provides a core structure and several basic detection modules, intended to be customized and extended by server developers.
 
@@ -7,13 +7,13 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 ## Features (Core Framework)
 
 *   **Modular Detector System**: Easily enable, disable, or create custom detection modules (`client/detectors/`).
-*   **Event-Driven Architecture**: Uses standardized events for communication via `shared/EventRegistry.lua` (Required).
+*   **Event-Driven Architecture**: Uses standardized events for communication via `shared/event_registry.lua`.
 *   **Client & Server Logic**: Basic separation of client-side checks and server-side validation/actions.
 *   **Configuration**: Extensive configuration options via `config.lua`.
 *   **Basic Detections Included**: Examples for God Mode, Speed Hack, NoClip, Teleport, Weapon Mods, Resource Monitoring, Menu Keybinds.
 *   **Helper Utilities**: Basic logging, database-driven ban system (requires setup), admin notifications.
 *   **Discord Integration**: Basic webhook logging and Rich Presence support.
-*   **Database Support**: Includes schema (`sql/schema.sql`) for storing bans, detections, and session summaries using `oxmysql`.
+*   **Database Support**: Includes schema (`sql/schema.sql`) for storing bans, detections, and session summaries using `oxmysql` (via `server/sv_database.lua`).
 
 ## Dependencies
 
@@ -21,7 +21,7 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 
 *   **[oxmysql](https://github.com/overextended/oxmysql)**: Required for database features (bans, detections, sessions) if `Config.Database.enabled = true`. Also provides the necessary JSON library. **Must be started before NexusGuard.**
 *   **[screenshot-basic](https://github.com/citizenfx/screenshot-basic)**: Required for the screenshot functionality if `Config.ScreenCapture.enabled = true`. **Must be started before NexusGuard.**
-*   **[ox_lib](https://github.com/overextended/ox_lib)**: Required for the default secure token implementation (HMAC-SHA256). Provides `lib.crypto`. **Must be started before NexusGuard.**
+*   **[ox_lib](https://github.com/overextended/ox_lib)**: Required for the default secure token implementation (HMAC-SHA256 via `lib.crypto`) and potentially other utilities. **Must be started before NexusGuard.**
 
 **Optional:**
 
@@ -31,18 +31,12 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 
 ## Installation
 
-1. Clone or download the repository into your `resources` folder.
-2. Add `ensure NexusGuard` to your `server.cfg`.
-3. Ensure dependencies like `oxmysql` and `screenshot-basic` are installed and started before NexusGuard.
-4. Configure `config.lua` to match your server's setup.
-5. Import the SQL schema (`sql/schema.sql`) into your database.
-
-1.  **Download:** Download the latest release (v0.6.9) of NexusGuard.
-2.  **Extract:** Extract the `NexusGuard` folder into your server's `resources` directory.
-3.  **Dependencies:** Ensure **oxmysql** and **screenshot-basic** are installed and listed in your `server.cfg` to start *before* NexusGuard. Install optional dependencies (like `chat`) as needed. **Note:** The `shared/event_registry.lua` included in this resource is essential for its operation.
+1.  **Download:** Download the latest release (v0.7.0) of NexusGuard.
+2.  **Extract:** Extract the `nexus-guard` (or similarly named) folder into your server's `resources` directory. Rename it to `NexusGuard` if desired.
+3.  **Dependencies:** Ensure **`oxmysql`**, **`screenshot-basic`**, and **`ox_lib`** are installed and listed in your `server.cfg` to start *before* NexusGuard. Install optional dependencies (like `chat`, `es_extended`, `qb-core`) as needed based on your `config.lua` settings.
 4.  **Database Setup:**
     *   Ensure you have a MySQL database server accessible by your FiveM server.
-    *   Import the `NexusGuard/sql/schema.sql` file into your database. This will create the necessary tables (`nexusguard_bans`, `nexusguard_detections`, `nexusguard_sessions`).
+    *   Import the `sql/schema.sql` file (located inside the NexusGuard resource folder) into your database. This will create the necessary tables (`nexusguard_bans`, `nexusguard_detections`, `nexusguard_sessions`).
     *   Ensure your `oxmysql` resource is correctly configured to connect to your database.
 5.  **Configure `config.lua`:**
     *   Carefully review **all** options in `config.lua`. Pay close attention to comments indicating required fields or critical settings.
@@ -54,8 +48,8 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
     *   Adjust detection thresholds (`Config.Thresholds`) and enable/disable detectors (`Config.Detectors`) based on testing and server needs.
 6.  **Implement Custom Logic (If Needed):**
     *   **Custom Permissions:** If you set `Config.PermissionsFramework = "custom"`, you **MUST** edit the `IsPlayerAdmin` function in `globals.lua` to add your specific permission checking logic.
-    *   **(Optional) Placeholders:** Review other functions marked as placeholders (e.g., `HandleEntityCreation`) and implement them if you intend to use those features.
-7.  **Server Config:** Add `ensure NexusGuard` to your `server.cfg`, ensuring it starts *after* its dependencies (`oxmysql`, `screenshot-basic`, `ox_lib`, and potentially `es_extended` or `qb-core` if selected).
+    *   **(Optional) Placeholders:** Review functions marked as placeholders in the code (search for comments like `-- Placeholder:`) and implement them if you intend to use those features.
+7.  **Server Config:** Add `ensure NexusGuard` to your `server.cfg`, ensuring it starts *after* its required dependencies (`oxmysql`, `screenshot-basic`, `ox_lib`) and any selected optional framework dependencies (`es_extended`, `qb-core`).
 8.  **Restart Server & Test:** Restart your FiveM server. Check the console thoroughly for any NexusGuard errors or warnings (especially critical ones about missing dependencies or security). Test detections and actions rigorously, paying close attention to admin checks.
 
 ## Configuration Deep Dive
@@ -71,9 +65,9 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 
 ## Adding Custom Detectors
 
-1.  Create a new Lua file in `NexusGuard/client/detectors/`.
-2.  Follow the structure of `NexusGuard/client/detectors/detector_template.lua`.
-3.  Define a unique `DetectorName`. This name will be used in `Config.Detectors` to enable/disable it.
+1.  Create a new Lua file in `client/detectors/`.
+2.  Follow the structure of `client/detectors/detector_template.lua`.
+3.  Define a unique `DetectorName` string variable within your new detector file. This name will be used as the key in `Config.Detectors` (in `config.lua`) to enable/disable it.
 4.  Implement the `Detector.Check()` function with your detection logic. Use `_G.NexusGuard:ReportCheat(DetectorName, details)` to report violations (this handles the warning system and triggers the server event).
 5.  Implement `Detector.Initialize()` if needed (e.g., to read specific config values).
 6.  The registration block at the end will automatically register and start your detector if `Config.Detectors[DetectorName]` is set to `true`.
@@ -137,26 +131,33 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
     *   **Cause:** Default thresholds in `Config.Thresholds` might be too strict for your server or specific situations (e.g., custom vehicles, specific framework teleports).
     *   **Solution:** Gradually increase the relevant threshold values in `Config.Thresholds` (e.g., `speedHackMultiplier`, `teleportDistance`) and test thoroughly. Monitor server console logs for detection messages to identify patterns.
 
-*   **"[NexusGuard] CRITICAL: _G.EventRegistry not found..." Error:**
-    *   **Cause:** The essential `shared/event_registry.lua` script is not being loaded correctly.
-    *   **Solution:** Ensure `shared/event_registry.lua` exists and is correctly listed under `shared_scripts` in your `fxmanifest.lua`.
+*   **"[NexusGuard] CRITICAL: EventRegistry not found..." Error:**
+    *   **Cause:** The essential `shared/event_registry.lua` script is not being loaded correctly, likely due to an issue in `fxmanifest.lua`.
+    *   **Solution:** Ensure `shared/event_registry.lua` exists and is correctly listed under `shared_scripts` in your `fxmanifest.lua`. Verify the file path and name are accurate.
 
 ## API / Exports
 
-NexusGuard currently exports a minimal API:
+NexusGuard exports a server-side API table defined in `globals.lua`.
 
 ```lua
--- Example Usage from another server script:
-local NexusGuardAPI = exports['NexusGuard']:GetNexusGuardAPI()
+-- Example Usage from another server-side script:
+local NexusGuardAPI = exports['NexusGuard']:GetNexusGuardServerAPI()
 
 if NexusGuardAPI then
-    -- Example (if you implement these functions in the API table in globals.lua):
-    -- local isFlagged = NexusGuardAPI.isPlayerFlagged(playerId)
-    -- NexusGuardAPI.reportSuspiciousActivity(sourcePlayerId, targetPlayerId, "Reason")
+    -- Check if a function exists before calling (good practice)
+    if NexusGuardAPI.IsPlayerAdmin then
+        local isAdmin = NexusGuardAPI.IsPlayerAdmin(source) -- 'source' is the player's server ID
+        print(('[Example] Player %s admin status: %s'):format(source, tostring(isAdmin)))
+    end
+
+    -- Example: Triggering a manual detection report (if you implement such a function)
+    -- if NexusGuardAPI.ReportManualDetection then
+    --     NexusGuardAPI.ReportManualDetection(adminSource, targetSource, "Manual observation: Suspicious behavior")
+    -- end
 end
 ```
 
-*Note: The specific functions available in the API table are defined at the bottom of `globals.lua`. Add functions there as needed, ensuring they are secure.*
+*Note: Review the `NexusGuardServerAPI` table definition at the bottom of `globals.lua` to see available functions. Add functions there as needed, ensuring they are secure and well-documented.*
 
 ## Contribution
 

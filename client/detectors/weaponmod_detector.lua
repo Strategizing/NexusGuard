@@ -1,158 +1,204 @@
-local DetectorName = "weaponModification" -- Match the key in Config.Detectors
-local NexusGuard = nil -- Local variable to hold the NexusGuard instance
+--[[
+    NexusGuard Weapon Modification Detector (client/detectors/weaponmod_detector.lua)
 
+    Purpose:
+    - Monitors the player's currently equipped weapon for potential modifications
+      to its damage output or clip size.
+    - Compares current weapon stats against a baseline established during a short
+      "learning phase" or potentially unreliable default values from natives.
+
+    Note on Reporting & Reliability:
+    - Client-side weapon stat natives (`GetWeaponDamage`, `GetWeaponClipSize`) can often
+      be hooked or return manipulated values, making client-side detection unreliable.
+    - Direct reporting (`NexusGuard:ReportCheat`) based on these checks has been REMOVED.
+    - The primary validation should occur server-side. This detector *should* trigger the
+      `NEXUSGUARD_WEAPON_CHECK` event (defined in `shared/event_registry.lua`) periodically,
+      sending the current weapon hash and clip size to the server (`server/modules/detections.lua`)
+      for comparison against configured, authoritative values (`Config.WeaponBaseClipSize`).
+      (Currently, this detector doesn't explicitly trigger that event; `client_main.lua` might need adjustment
+       or this detector needs modification to send the event instead of just performing local checks).
+    - The checks remain here mainly for potential local logging or as a reference.
+]]
+
+local DetectorName = "weaponModification" -- Unique key for this detector (matches Config.Detectors key)
+local NexusGuard = nil -- Local reference to the main NexusGuard client instance
+
+-- Detector module table
 local Detector = {
-    active = false,
-    interval = 3000, -- Default, will be overridden by config if available
-    lastCheck = 0,
-    state = { -- Local state for weapon stats
-        weaponStats = {}
+    active = false,     -- Is the detector currently running? Set by Start/Stop.
+    interval = 3000,    -- Default check interval (ms). Overridden by config.
+    lastCheck = 0,      -- Timestamp of the last check.
+    state = {           -- Local state to store baseline weapon stats.
+        weaponStats = {} -- Key: weaponHash, Value: { baseDamage, baseClipSize, firstSeen, samples }
     }
 }
 
--- Initialize the detector (called once by the registry)
--- Receives the NexusGuard instance from the registry
+--[[
+    Initialization Function
+    Called by the DetectorRegistry during startup.
+    @param nexusGuardInstance (table): The main NexusGuard client instance.
+]]
 function Detector.Initialize(nexusGuardInstance)
     if not nexusGuardInstance then
-        print("^1[NexusGuard:" .. DetectorName .. "] CRITICAL: Failed to receive NexusGuard instance during initialization.^7")
+        print(("^1[NexusGuard:%s] CRITICAL: Failed to receive NexusGuard instance during initialization.^7"):format(DetectorName))
         return false
     end
-    NexusGuard = nexusGuardInstance -- Store the instance locally
+    NexusGuard = nexusGuardInstance -- Store the reference.
 
-    -- Update interval from global config if available
-    -- Access Config via the passed instance
+    -- Read configuration (interval) via the NexusGuard instance.
     local cfg = NexusGuard.Config
-    if cfg and cfg.Detectors and cfg.Detectors.weaponModification and NexusGuard.intervals and NexusGuard.intervals.weaponModification then
-        Detector.interval = NexusGuard.intervals.weaponModification
-    end
-    print("^2[NexusGuard:" .. DetectorName .. "]^7 Initialized with interval: " .. Detector.interval .. "ms")
+    Detector.interval = (cfg and cfg.Intervals and cfg.Intervals[DetectorName]) or Detector.interval
+
+    Log(("[%s Detector] Initialized. Interval: %dms. Note: Detection relies on server-side validation.^7"):format(DetectorName, Detector.interval), 2)
     return true
 end
 
--- Start the detector (Called by Registry)
--- The registry now handles the thread creation loop.
+--[[
+    Start Function
+    Called by the DetectorRegistry to activate the detector.
+]]
 function Detector.Start()
     if Detector.active then return false end -- Already active
+    Log(("[%s Detector] Starting checks..."):format(DetectorName), 3)
     Detector.active = true
-    -- No need to create thread here, registry does it.
-    -- Print statement moved to registry for consistency.
-    return true -- Indicate success
+    Detector.lastCheck = 0
+    -- Clear previous weapon stats cache on start? Optional.
+    -- Detector.state.weaponStats = {}
+    return true -- Indicate successful start
 end
 
--- Stop the detector (Called by Registry)
--- The registry relies on this setting the active flag to false.
+--[[
+    Stop Function
+    Called by the DetectorRegistry to deactivate the detector.
+]]
 function Detector.Stop()
     if not Detector.active then return false end -- Already stopped
+    Log(("[%s Detector] Stopping checks..."):format(DetectorName), 3)
     Detector.active = false
-    -- Print statement moved to registry for consistency.
-    return true -- Indicate success
+    return true -- Indicate successful stop signal
 end
 
--- Check for violations (Moved logic from client_main.lua)
+--[[
+    Core Check Function
+    Called periodically by the DetectorRegistry's managed thread.
+    Checks current weapon's damage and clip size against a baseline.
+    NOTE: Does NOT report cheats; relies on server-side validation via NEXUSGUARD_WEAPON_CHECK event.
+]]
 function Detector.Check()
-    -- Ensure NexusGuard instance is available
-    if not NexusGuard then
-        print("^1[NexusGuard:" .. DetectorName .. "] Error: NexusGuard instance not available in Check function.^7")
-        return
-    end
+    -- Ensure NexusGuard instance is available.
+    if not NexusGuard then return true end -- Skip check if core instance is missing.
 
-    -- Cache config values locally
-    -- Access Config via the stored NexusGuard instance
+    -- Access config thresholds via the stored NexusGuard instance.
     local cfg = NexusGuard.Config
+    -- Multiplier for damage check (e.g., 1.5 allows 50% increase over baseline).
     local damageThresholdMultiplier = (cfg and cfg.Thresholds and cfg.Thresholds.weaponDamageMultiplier) or 1.5
-    local clipSizeThresholdMultiplier = 2.0 -- Example: Allow double clip size, make configurable if needed
+    -- Multiplier for clip size check (e.g., 2.0 allows double the baseline clip size). Consider making configurable.
+    local clipSizeThresholdMultiplier = (cfg and cfg.Thresholds and cfg.Thresholds.weaponClipMultiplier) or 2.0
 
-    local ped = PlayerPedId()
+    local playerPed = PlayerPedId()
 
-    -- Safety checks
-    if not DoesEntityExist(ped) then return end
+    -- Basic safety check.
+    if not DoesEntityExist(playerPed) then return true end
 
-    local currentWeaponHash = GetSelectedPedWeapon(ped)
+    local currentWeaponHash = GetSelectedPedWeapon(playerPed)
 
-    -- Only check if player has a weapon equipped (excluding unarmed)
+    -- Only perform checks if the player has a weapon equipped (i.e., not unarmed).
     if currentWeaponHash ~= GetHashKey("WEAPON_UNARMED") then
-        -- Get current weapon stats (use natives that return default values if modified)
-        -- Note: Relying solely on client-side natives for default values can be bypassed.
-        -- A more robust check would involve server-side validation or comparing against known defaults.
-        local currentDamage = GetWeaponDamage(currentWeaponHash) -- This might return the modified value
-        local currentClipSize = GetWeaponClipSize(currentWeaponHash) -- This might return the modified value
 
-        -- Get default stats (more reliable if available, otherwise use first seen)
-        -- Placeholder: Ideally, load default weapon stats from a config or server event
-        local defaultDamage = GetWeaponDamage(currentWeaponHash, true) -- Attempt to get default, may not work reliably
-        local defaultClipSize = GetWeaponClipSize(currentWeaponHash) -- Get default clip size (only takes weaponHash)
+        -- 1. Get Current Weapon Stats using Natives
+        -- WARNING: These natives might return modified values if the client is cheating.
+        local currentDamage = GetWeaponDamage(currentWeaponHash)
+        local currentClipSize = GetMaxAmmoInClip(playerPed, currentWeaponHash, true) -- Use GetMaxAmmoInClip for current capacity
 
-        -- Initialize weapon stats in local state if not yet recorded
+        -- 2. Attempt to Get Default/Baseline Stats
+        -- Getting reliable default stats client-side is difficult.
+        -- `GetWeaponDamage(hash, true)` is documented but might not work as expected.
+        -- `GetWeaponClipSize(hash)` gets the *default* clip size for the weapon type.
+        local defaultDamage = GetWeaponDamage(currentWeaponHash, true) -- Attempt to get default damage (reliability varies).
+        local defaultClipSize = GetWeaponClipSize(currentWeaponHash) -- Get default clip size for this weapon type.
+
+        -- 3. Initialize or Update Baseline in Local State
+        -- If this weapon hasn't been seen before, store its initial stats as a baseline.
         if not Detector.state.weaponStats[currentWeaponHash] then
             Detector.state.weaponStats[currentWeaponHash] = {
-                -- Store first seen values as a baseline if defaults aren't reliable
-                baseDamage = defaultDamage or currentDamage,
-                baseClipSize = defaultClipSize or currentClipSize,
+                -- Use the potentially unreliable default native result if available, otherwise use the first value seen.
+                baseDamage = (defaultDamage and defaultDamage > 0) and defaultDamage or currentDamage,
+                baseClipSize = (defaultClipSize and defaultClipSize > 0) and defaultClipSize or currentClipSize,
                 firstSeen = GetGameTimer(),
                 samples = 1
             }
-            -- print("^3[DEBUG:"..DetectorName.."]^7 Initial stats for " .. currentWeaponHash .. ": Dmg=" .. Detector.state.weaponStats[currentWeaponHash].baseDamage .. ", Clip=" .. Detector.state.weaponStats[currentWeaponHash].baseClipSize)
-            return -- Don't check on the very first sample
+            -- Log(("[%s Detector] Initial stats for %u: Dmg=%.2f, Clip=%d"):format(
+            --     DetectorName, currentWeaponHash, Detector.state.weaponStats[currentWeaponHash].baseDamage, Detector.state.weaponStats[currentWeaponHash].baseClipSize
+            -- ), 4) -- Debug log
+            return true -- Don't perform checks on the very first sample.
         end
 
         local storedStats = Detector.state.weaponStats[currentWeaponHash]
 
-        -- Allow a brief learning phase or require multiple samples
-        if GetGameTimer() - storedStats.firstSeen < 10000 and storedStats.samples < 3 then
+        -- 4. Learning Phase (Optional): Wait for a few samples before starting checks.
+        local learningDuration = 10000 -- ms (e.g., 10 seconds)
+        local requiredSamples = 3
+        if GetGameTimer() - storedStats.firstSeen < learningDuration and storedStats.samples < requiredSamples then
             storedStats.samples = storedStats.samples + 1
-            -- Update baseline if defaults were initially unavailable and now seem stable
-            if not defaultDamage and currentDamage ~= storedStats.baseDamage then storedStats.baseDamage = currentDamage end
-            if not defaultClipSize and currentClipSize ~= storedStats.baseClipSize then storedStats.baseClipSize = currentClipSize end
-            return
+            -- Potentially update baseline during learning if default values were bad and current values seem stable.
+            -- (This logic could be refined or removed depending on trust in initial values).
+            -- if not defaultDamage and currentDamage ~= storedStats.baseDamage then storedStats.baseDamage = currentDamage end
+            -- if not defaultClipSize and currentClipSize ~= storedStats.baseClipSize then storedStats.baseClipSize = currentClipSize end
+            return true -- Continue learning phase.
         end
 
-        -- Compare current damage against the stored baseline/default
+        -- 5. Perform Client-Side Checks (Primarily for logging/reference, NOT reporting)
+
+        -- Damage Check: Compare current damage to baseline * multiplier.
         if storedStats.baseDamage > 0 and currentDamage > (storedStats.baseDamage * damageThresholdMultiplier) then
             local details = {
-                type = "damage",
-                weaponHash = currentWeaponHash,
-                detectedValue = currentDamage,
-                baselineValue = storedStats.baseDamage,
-                clientThreshold = damageThresholdMultiplier
+                type = "damage", weaponHash = currentWeaponHash, detectedValue = currentDamage,
+                baselineValue = storedStats.baseDamage, clientThreshold = damageThresholdMultiplier
             }
-            -- Use the stored NexusGuard instance to report
-            -- NOTE: Client-side reporting for damage is removed. Server-side validation should handle this.
-            -- if NexusGuard and NexusGuard.ReportCheat then
-            --     NexusGuard:ReportCheat(DetectorName, details)
-            -- else
-            --     print("^1[NexusGuard:" .. DetectorName .. "]^7 Violation (Damage): " .. json.encode(details) .. " (NexusGuard instance unavailable)")
-            -- end
+            -- Log locally if needed, but DO NOT report. Server validation is required.
+            -- Log(("[%s Detector] Client detected potential damage mod: %.2f > %.2f * %.1f"):format(
+            --     DetectorName, currentDamage, storedStats.baseDamage, damageThresholdMultiplier
+            -- ), 2)
+            -- Reporting removed: NexusGuard:ReportCheat(DetectorName, details)
         end
 
-        -- Compare current clip size against the stored baseline/default
+        -- Clip Size Check: Compare current clip size to baseline * multiplier.
         if storedStats.baseClipSize > 0 and currentClipSize > (storedStats.baseClipSize * clipSizeThresholdMultiplier) then
              local details = {
-                type = "clipSize",
-                weaponHash = currentWeaponHash,
-                detectedValue = currentClipSize,
-                baselineValue = storedStats.baseClipSize,
-                clientThreshold = clipSizeThresholdMultiplier
+                type = "clipSize", weaponHash = currentWeaponHash, detectedValue = currentClipSize,
+                baselineValue = storedStats.baseClipSize, clientThreshold = clipSizeThresholdMultiplier
             }
-             -- Use the stored NexusGuard instance to report
-             -- NOTE: As per Prompt 24, client-side reporting for clip size is removed. Server-side validation should handle this if implemented.
-             -- if NexusGuard and NexusGuard.ReportCheat then
-             --    NexusGuard:ReportCheat(DetectorName, details)
-             -- else
-             --    print("^1[NexusGuard:" .. DetectorName .. "]^7 Violation (Clip Size): " .. json.encode(details) .. " (NexusGuard instance unavailable)")
+             -- Log locally if needed, but DO NOT report. Server validation via NEXUSGUARD_WEAPON_CHECK is required.
+             -- Log(("[%s Detector] Client detected potential clip size mod: %d > %d * %.1f"):format(
+             --    DetectorName, currentClipSize, storedStats.baseClipSize, clipSizeThresholdMultiplier
+             -- ), 2)
+             -- Reporting removed: NexusGuard:ReportCheat(DetectorName, details)
+
+             -- TODO: This detector should ideally trigger the 'NEXUSGUARD_WEAPON_CHECK' event here,
+             -- sending `currentWeaponHash` and `currentClipSize` to the server for validation
+             -- against `Config.WeaponBaseClipSize`. Example:
+             -- if LocalEventRegistry then -- Assuming EventRegistry is passed during Initialize
+             --    LocalEventRegistry:TriggerServerEvent('NEXUSGUARD_WEAPON_CHECK', currentWeaponHash, currentClipSize, NexusGuard.securityToken)
              -- end
         end
     end
+
+    return true -- Indicate check cycle completed.
 end
 
-
--- Get detector status
+--[[
+    (Optional) GetStatus Function
+    Provides current status information for this detector.
+    @return (table): Status details.
+]]
 function Detector.GetStatus()
     return {
         active = Detector.active,
         lastCheck = Detector.lastCheck,
         interval = Detector.interval
+        -- Could add details from Detector.state.weaponStats if needed for debugging.
     }
 end
 
--- Registration is now handled centrally by client_main.lua
--- The self-registration thread below has been removed.
+-- Return the Detector table for the registry.
+return Detector

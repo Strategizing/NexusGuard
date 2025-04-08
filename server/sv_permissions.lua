@@ -1,107 +1,162 @@
 --[[
-    NexusGuard Server Permissions Module
-    Handles admin checks based on configured framework.
+    NexusGuard Server Permissions Module (server/sv_permissions.lua)
+
+    Purpose:
+    - Determines if a player has administrative privileges within NexusGuard.
+    - Supports multiple permission systems (ACE, ESX, QBCore, Custom) based on `Config.PermissionsFramework`.
+    - Attempts to load ESX/QBCore framework objects if the respective resources are running.
+
+    Usage:
+    - Required by `globals.lua` and exposed via the `NexusGuardServer.Permissions` API table.
+    - The `IsAdmin` function is the primary export used by other modules and commands.
 ]]
 
-local Utils = require('server/sv_utils') -- Load the utils module
+local Utils = require('server/sv_utils') -- Load the utils module for logging.
 local Log = Utils.Log
 
-local Permissions = {}
-local ESX = nil
-local QBCore = nil
+local Permissions = {} -- Table to hold the exported functions.
+local ESX = nil      -- Placeholder for the ESX Shared Object.
+local QBCore = nil   -- Placeholder for the QBCore Core Object.
 
--- Attempt to load framework objects (Needs to run early)
+--[[
+    Framework Object Loading Thread
+    Attempts to load ESX and QBCore objects shortly after the resource starts.
+    This allows the IsAdmin function to use framework-specific checks if configured.
+    Runs asynchronously to avoid blocking initialization if frameworks aren't present.
+]]
 Citizen.CreateThread(function()
-    Citizen.Wait(1000) -- Give frameworks time to load
+    Citizen.Wait(1000) -- Wait a second to give frameworks a chance to load and export their objects.
+    -- Check for ESX
     if GetResourceState('es_extended') == 'started' then
         local esxExport = exports['es_extended']
+        -- Use the standard method to get the ESX Shared Object.
         if esxExport and esxExport.getSharedObject then
              ESX = esxExport:getSharedObject()
-             Log("Permissions: ESX object loaded.", 3)
+             Log("Permissions: ESX SharedObject loaded successfully.", 3)
         else
-             Log("Permissions: es_extended resource found, but could not get SharedObject.", 2)
+             Log("Permissions: es_extended resource is running, but failed to get SharedObject export.", 2)
         end
     end
+    -- Check for QBCore
     if GetResourceState('qb-core') == 'started' then
          local qbExport = exports['qb-core']
+         -- Use the standard method to get the QBCore Core Object.
          if qbExport and qbExport.GetCoreObject then
              QBCore = qbExport:GetCoreObject()
-             Log("Permissions: QBCore object loaded.", 3)
+             Log("Permissions: QBCore CoreObject loaded successfully.", 3)
          else
-             Log("Permissions: qb-core resource found, but could not get CoreObject.", 2)
+             Log("Permissions: qb-core resource is running, but failed to get CoreObject export.", 2)
          end
     end
+    Log("Permissions: Framework object loading attempt complete.", 3)
 end)
 
--- Checks if a player has admin privileges based on Config settings
--- @param playerId number: The server ID of the player.
--- @return boolean: True if the player is considered an admin, false otherwise.
+--[[
+    Checks if a player has admin privileges based on the configured permission framework
+    and the admin groups listed in `Config.AdminGroups`.
+
+    @param playerId (number): The server ID of the player to check.
+    @return (boolean): True if the player is considered an admin according to the configuration, false otherwise.
+]]
 function Permissions.IsAdmin(playerId)
     local player = tonumber(playerId)
+    -- Basic validation: Ensure player ID is valid and player is likely online.
     if not player or player <= 0 or not GetPlayerName(player) then return false end
 
-    -- Access Config directly as it's loaded globally early
+    -- Access the global Config table (loaded from config.lua via shared_scripts).
     local cfg = _G.Config
-    if not cfg or not cfg.AdminGroups then
-        Log("^1Warning: Config.AdminGroups not found for IsPlayerAdmin check.^7", 1)
-        return false
+    -- Ensure required config settings are present.
+    if not cfg or not cfg.AdminGroups or type(cfg.AdminGroups) ~= 'table' then
+        Log("^1Permissions Error: Config.AdminGroups is missing or not a table. Cannot perform admin check.^7", 1)
+        return false -- Cannot check without admin groups defined.
     end
     if not cfg.PermissionsFramework then
-         Log("^1Warning: Config.PermissionsFramework not set. Defaulting to 'ace'.^7", 1)
+         Log("^1Permissions Warning: Config.PermissionsFramework not set. Defaulting to 'ace' permission checks.^7", 1)
     end
 
-    local frameworkSetting = cfg.PermissionsFramework or "ace"
+    -- Determine the permission framework to use from config, defaulting to 'ace'.
+    local frameworkSetting = string.lower(cfg.PermissionsFramework or "ace")
 
-    -- Define checks locally within the function scope
+    --[[ Internal Helper Functions for Specific Framework Checks ]]
+
+    -- Checks ESX group against Config.AdminGroups.
     local function checkESX()
-        if ESX then
-            local xPlayer = ESX.GetPlayerFromId(player)
+        if ESX then -- Check if the ESX object was loaded successfully earlier.
+            local xPlayer = ESX.GetPlayerFromId(player) -- Get the ESX player object.
             if xPlayer then
-                local playerGroup = xPlayer.getGroup()
-                for _, group in ipairs(cfg.AdminGroups) do
-                    if playerGroup == group then return true end
+                local playerGroup = xPlayer.getGroup() -- Get the player's group name.
+                -- Iterate through the admin groups defined in config.
+                for _, adminGroup in ipairs(cfg.AdminGroups) do
+                    if playerGroup == adminGroup then return true end -- Found a match.
                 end
             else
-                -- Log only if ESX was expected but failed to get player
-                if frameworkSetting == "esx" then Log("^1Warning: Could not get xPlayer object for player " .. player .. " in IsPlayerAdmin (ESX check).^7", 1) end
+                -- Log a warning if ESX is the configured framework but we couldn't get the player object.
+                if frameworkSetting == "esx" then Log(("^1Permissions Warning: Could not get xPlayer object for player %d during ESX admin check.^7"):format(player), 1) end
             end
         else
-            if frameworkSetting == "esx" then Log("^1Warning: Config.PermissionsFramework set to 'esx' but ESX object was not loaded.^7", 1) end
+            -- Log a warning if ESX is configured but the object wasn't loaded.
+            if frameworkSetting == "esx" then Log("^1Permissions Warning: Configured for 'esx' but ESX object was not loaded. Ensure es_extended starts before NexusGuard.^7", 1) end
         end
-        return false
+        return false -- Player is not an admin according to ESX check.
     end
 
+    -- Checks QBCore permissions against Config.AdminGroups.
     local function checkQBCore()
-        if QBCore then
-            for _, group in ipairs(cfg.AdminGroups) do
-                -- Ensure HasPermission exists before calling
-                if QBCore.Functions and QBCore.Functions.HasPermission then
-                    if QBCore.Functions.HasPermission(player, group) then return true end
-                else
-                    Log("^1Warning: QBCore.Functions.HasPermission not found. Cannot check QBCore permissions.^7", 1)
-                    return false -- Can't check, assume false
+        if QBCore then -- Check if the QBCore object was loaded.
+            -- Ensure the necessary QBCore function exists before calling it.
+            if QBCore.Functions and QBCore.Functions.HasPermission then
+                -- Iterate through the admin groups/permissions defined in config.
+                for _, adminPermission in ipairs(cfg.AdminGroups) do
+                    -- Use QBCore's permission checking function.
+                    if QBCore.Functions.HasPermission(player, adminPermission) then return true end -- Found a match.
                 end
+            else
+                -- Log an error if the QBCore permission function is missing.
+                Log("^1Permissions Error: QBCore.Functions.HasPermission not found. Cannot check QBCore permissions.^7", 1)
+                return false -- Cannot perform check, assume not admin.
             end
         else
-            if frameworkSetting == "qbcore" then Log("^1Warning: Config.PermissionsFramework set to 'qbcore' but QBCore object was not loaded.^7", 1) end
+            -- Log a warning if QBCore is configured but the object wasn't loaded.
+            if frameworkSetting == "qbcore" then Log("^1Permissions Warning: Configured for 'qbcore' but QBCore object was not loaded. Ensure qb-core starts before NexusGuard.^7", 1) end
         end
-        return false
+        return false -- Player is not an admin according to QBCore check.
     end
 
+    -- Checks FiveM's built-in ACE permissions against Config.AdminGroups.
     local function checkACE()
-        for _, group in ipairs(cfg.AdminGroups) do
-            if IsPlayerAceAllowed(player, "group." .. group) then return true end
+        -- Iterate through the admin groups defined in config.
+        for _, adminGroup in ipairs(cfg.AdminGroups) do
+            -- Use the IsPlayerAceAllowed native, prefixing the group name with "group.".
+            if IsPlayerAceAllowed(player, "group." .. adminGroup) then return true end -- Found a match.
         end
-        return false
+        return false -- Player is not an admin according to ACE check.
     end
 
+    -- Placeholder for custom permission logic.
     local function checkCustom()
-        Log("IsPlayerAdmin: Config.PermissionsFramework set to 'custom'. Implement your logic in sv_permissions.lua.", 3)
-        -- !! DEVELOPER !!: Add your custom permission check logic here
-        return false
+        Log("Permissions Info: Config.PermissionsFramework set to 'custom'. Add custom logic to Permissions.IsAdmin in sv_permissions.lua.", 3)
+        -- ###########################################################
+        -- ## DEVELOPER TODO: Implement Custom Permission Check Logic ##
+        -- ###########################################################
+        --[[ Example using player identifiers and a hypothetical database check:
+        local identifiers = GetPlayerIdentifiers(player)
+        local license = nil
+        for _, v in ipairs(identifiers) do
+            if string.sub(v, 1, string.len("license:")) == "license:" then
+                license = v
+                break
+            end
+        end
+        if license then
+            -- Replace with your actual database query logic
+            -- local isCustomAdmin = MySQL.scalar.await('SELECT COUNT(*) FROM your_admin_table WHERE license = ?', {license})
+            -- return isCustomAdmin > 0
+        end
+        ]]
+        return false -- Default to false if custom logic is not implemented.
     end
 
-    -- Execute the appropriate check based on config
+    -- Execute the appropriate check based on the configured frameworkSetting.
     if frameworkSetting == "esx" then
         return checkESX()
     elseif frameworkSetting == "qbcore" then
@@ -109,15 +164,17 @@ function Permissions.IsAdmin(playerId)
     elseif frameworkSetting == "custom" then
         return checkCustom()
     elseif frameworkSetting == "ace" then
-        -- For ACE, also attempt framework checks if objects loaded, as ACE might be a fallback
-        if ESX and checkESX() then return true end
-        if QBCore and checkQBCore() then return true end
-        return checkACE() -- Fallback to pure ACE check
+        -- Special case for 'ace': Also attempt framework checks if their objects were loaded.
+        -- This allows using ACE permissions as a fallback or alongside framework permissions.
+        if ESX and checkESX() then return true end      -- Check ESX first if loaded
+        if QBCore and checkQBCore() then return true end -- Then check QBCore if loaded
+        return checkACE()                               -- Finally, perform the ACE check.
     else
-        Log("^1Warning: Invalid Config.PermissionsFramework value: '" .. frameworkSetting .. "'. Defaulting to ACE check.^7", 1)
-        return checkACE()
+        -- Handle invalid framework setting in config.
+        Log(("^1Permissions Warning: Invalid Config.PermissionsFramework value: '%s'. Defaulting to ACE check.^7"):format(frameworkSetting), 1)
+        return checkACE() -- Default to ACE check if setting is unrecognized.
     end
 end
 
--- Return the Permissions table containing the functions
+-- Return the Permissions table containing the IsAdmin function for export via globals.lua.
 return Permissions

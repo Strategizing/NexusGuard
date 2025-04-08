@@ -1,121 +1,167 @@
-local DetectorName = "godMode"
-local NexusGuard = nil -- Local variable to hold the NexusGuard instance
+--[[
+    NexusGuard God Mode Detector (client/detectors/godmode_detector.lua)
 
+    Purpose:
+    - Performs client-side checks related to player invincibility, health, and armor levels.
+    - Primarily acts as a local monitor; relies on server-side validation of data sent via
+      the `NEXUSGUARD_HEALTH_UPDATE` event for actual cheat confirmation and action.
+
+    Note on Reporting:
+    - This detector previously used `NexusGuard:ReportCheat`. However, client-side health/armor values
+      can be easily spoofed. Therefore, reporting has been removed.
+    - The server (`server/modules/detections.lua`) now performs validation based on the periodic
+      health/armor updates sent by `client_main.lua` (`SendHealthUpdate` function).
+    - The checks remain here mainly for potential local logging (currently commented out) or future
+      client-side heuristics if needed, but they do not trigger direct anti-cheat actions.
+]]
+
+local DetectorName = "godMode" -- Unique key for this detector
+local NexusGuard = nil -- Local reference to the main NexusGuard client instance
+
+-- Detector module table
 local Detector = {
-    active = false,
-    interval = 5000, -- Default, will be overridden by config if available
-    lastCheck = 0,
-    state = { -- Local state for this detector if needed
-        health = 100
+    active = false,     -- Is the detector currently running? Set by Start/Stop.
+    interval = 5000,    -- Default check interval (ms). Overridden by config.
+    lastCheck = 0,      -- Timestamp of the last check.
+    state = {           -- Local state specific to this detector.
+        lastHealth = 100 -- Store the last known health value for regen checks.
     }
 }
 
--- Initialize the detector (called once by the registry)
--- Receives the NexusGuard instance from the registry
+--[[
+    Initialization Function
+    Called by the DetectorRegistry during startup.
+    @param nexusGuardInstance (table): The main NexusGuard client instance.
+]]
 function Detector.Initialize(nexusGuardInstance)
     if not nexusGuardInstance then
-        print("^1[NexusGuard:" .. DetectorName .. "] CRITICAL: Failed to receive NexusGuard instance during initialization.^7")
+        print(("^1[NexusGuard:%s] CRITICAL: Failed to receive NexusGuard instance during initialization.^7"):format(DetectorName))
         return false
     end
-    NexusGuard = nexusGuardInstance -- Store the instance locally
+    NexusGuard = nexusGuardInstance -- Store the reference.
 
-    -- Update interval from global config if available
-    -- Access Config via the passed instance
+    -- Read configuration (interval) via the NexusGuard instance.
     local cfg = NexusGuard.Config
-    if cfg and cfg.Detectors and cfg.Detectors.godMode and NexusGuard.intervals and NexusGuard.intervals.godMode then
-        Detector.interval = NexusGuard.intervals.godMode
-    end
-    print("^2[NexusGuard:" .. DetectorName .. "]^7 Initialized with interval: " .. Detector.interval .. "ms")
+    -- Use configured interval if found, otherwise keep the default.
+    Detector.interval = (cfg and cfg.Intervals and cfg.Intervals[DetectorName]) or Detector.interval
+
+    -- Log initialization status and interval.
+    -- Note: The 'active' status is set by the Start function called by the registry.
+    Log(("[%s Detector] Initialized. Interval: %dms"):format(DetectorName, Detector.interval), 3)
     return true
 end
 
--- Start the detector (Called by Registry)
--- The registry now handles the thread creation loop.
+--[[
+    Start Function (Optional but Recommended)
+    Called by the DetectorRegistry to activate the detector.
+    Sets the `active` flag to true, allowing the check loop (managed by the registry) to run.
+]]
 function Detector.Start()
     if Detector.active then return false end -- Already active
+    Log(("[%s Detector] Starting checks..."):format(DetectorName), 3)
     Detector.active = true
-    -- No need to create thread here, registry does it.
-    -- Print statement moved to registry for consistency.
-    return true -- Indicate success
+    Detector.lastCheck = 0 -- Reset last check time on start
+    -- Initialize state if needed
+    local playerPed = PlayerPedId()
+    if DoesEntityExist(playerPed) then Detector.state.lastHealth = GetEntityHealth(playerPed) end
+    return true -- Indicate successful start
 end
 
--- Stop the detector (Called by Registry)
--- The registry relies on this setting the active flag to false.
+--[[
+    Stop Function (Optional but Recommended)
+    Called by the DetectorRegistry to deactivate the detector.
+    Sets the `active` flag to false, causing the check loop to terminate.
+]]
 function Detector.Stop()
     if not Detector.active then return false end -- Already stopped
+    Log(("[%s Detector] Stopping checks..."):format(DetectorName), 3)
     Detector.active = false
-    -- Print statement moved to registry for consistency.
-    return true -- Indicate success
+    return true -- Indicate successful stop signal
 end
 
--- Check for violations (Moved logic from client_main.lua)
+--[[
+    Core Check Function
+    Called periodically by the DetectorRegistry's managed thread.
+    Performs local checks for invincibility, abnormal health/armor, and regeneration.
+    NOTE: Currently does NOT report cheats; relies on server-side validation of health updates.
+]]
 function Detector.Check()
-    -- Ensure NexusGuard instance is available
+    -- Ensure NexusGuard instance is available (should always be if initialized correctly).
     if not NexusGuard then
-        print("^1[NexusGuard:" .. DetectorName .. "] Error: NexusGuard instance not available in Check function.^7")
-        return
+        print(("^1[NexusGuard:%s] Error: NexusGuard instance not available in Check function.^7"):format(DetectorName))
+        return true -- Return true to avoid rapid re-checks on error
     end
 
-    -- Cache config values locally
-    -- Access Config via the stored NexusGuard instance
+    -- Access config thresholds via the stored NexusGuard instance.
     local cfg = NexusGuard.Config
+    -- Threshold for client-side regen logging (server has its own threshold).
     local healthRegenThreshold = (cfg and cfg.Thresholds and cfg.Thresholds.healthRegenerationRate) or 2.0
+    -- Max expected health (server also validates this).
+    local maxExpectedHealth = (cfg and cfg.Thresholds and cfg.Thresholds.maxHealthThreshold) or 200 -- Allow slightly above 100 base
+    -- Max expected armor (server also validates this).
+    local maxExpectedArmor = (cfg and cfg.Thresholds and cfg.Thresholds.maxArmorThreshold) or 100
 
-    local ped = PlayerPedId()
     local player = PlayerId()
+    local playerPed = PlayerPedId()
 
-    -- Safety checks
-    if not DoesEntityExist(ped) then return end
+    -- Basic safety check.
+    if not DoesEntityExist(playerPed) then return true end -- Skip check if ped doesn't exist.
 
-    local health = GetEntityHealth(ped)
-    local maxHealth = GetPedMaxHealth(ped) -- Use GetPedMaxHealth for accuracy
-    local armor = GetPedArmour(ped)
+    local currentHealth = GetEntityHealth(playerPed)
+    local currentMaxHealth = GetPedMaxHealth(playerPed) -- Get the ped's actual max health native.
+    local currentArmor = GetPedArmour(playerPed)
 
-    -- Check for invincibility flag (Client-side check for reference/logging, no report)
+    -- 1. Check Invincibility Flag (GetPlayerInvincible)
+    -- This native can sometimes be unreliable or bypassed. Server-side checks are more robust.
+    -- No ReportCheat call here. Server can perform its own checks if desired.
     if GetPlayerInvincible(player) then
-        -- NOTE: As per Guideline 23, client-side reporting for invincibility flag is removed.
-        -- Server can perform this check if needed during health update validation.
-        -- if NexusGuard and NexusGuard.ReportCheat then
-        --     local details = { reason = "Player invincibility flag enabled" }
-        --     NexusGuard:ReportCheat(DetectorName, details)
-        -- else
-        --     print("^1[NexusGuard:" .. DetectorName .. "]^7 Violation: Player invincibility flag enabled (NexusGuard instance unavailable)")
-        -- end
+        -- Log(("[%s Detector] Client detected player invincibility flag is ON."):format(DetectorName), 3)
     end
 
-    -- Check for abnormal health values (Client-side check for reference/logging, no report)
-    if health > maxHealth and health > 200 then -- Keep the > 200 check as a sanity threshold
-         -- print("^3[NexusGuard:" .. DetectorName .. "]^7 Client detected abnormal health: " .. health .. "/" .. maxHealth)
-         -- No ReportCheat call here, server handles via NEXUSGUARD_HEALTH_UPDATE
+    -- 2. Check for Abnormal Health Values (Exceeding Max Health)
+    -- Compare current health against the ped's max health and a configured sanity threshold.
+    -- No ReportCheat call here; server validates health updates.
+    if currentHealth > currentMaxHealth and currentHealth > maxExpectedHealth then
+        -- Log(("[%s Detector] Client detected abnormal health: %d / %d (Max Expected: %d)"):format(DetectorName, currentHealth, currentMaxHealth, maxExpectedHealth), 3)
     end
 
-    -- Track health regeneration (Client-side check for reference/logging, no report)
-    if Detector.state.health < health and health <= maxHealth then -- Only track regeneration up to max health
-        local healthIncrease = health - Detector.state.health
+    -- 3. Track Health Regeneration Rate (Client-side heuristic)
+    -- Check if health increased significantly since the last check.
+    -- No ReportCheat call here; server validates health updates and regen rates.
+    if Detector.state.lastHealth < currentHealth and currentHealth <= currentMaxHealth then -- Only check regen up to max health.
+        local healthIncrease = currentHealth - Detector.state.lastHealth
+        -- Check against a local threshold (primarily for logging/debugging).
         if healthIncrease > healthRegenThreshold then
-             -- print("^3[NexusGuard:" .. DetectorName .. "]^7 Client detected abnormal health regeneration: +" .. string.format("%.1f", healthIncrease) .. " HP")
-             -- No ReportCheat call here, server handles via NEXUSGUARD_HEALTH_UPDATE
+             -- Log(("[%s Detector] Client detected high health regeneration: +%.1f HP"):format(DetectorName, healthIncrease), 3)
         end
     end
 
-    -- Check for armor anomalies (Client-side check for reference/logging, no report)
-    if armor > 100 then -- Standard max armor is 100
-         -- print("^3[NexusGuard:" .. DetectorName .. "]^7 Client detected abnormal armor value: " .. armor)
-         -- No ReportCheat call here, server handles via NEXUSGUARD_HEALTH_UPDATE
-    end -- End of armor check <<<< This end closes the if armor > 100 block
+    -- 4. Check for Abnormal Armor Values
+    -- Check if armor exceeds the standard maximum (100).
+    -- No ReportCheat call here; server validates armor updates.
+    if currentArmor > maxExpectedArmor then
+         -- Log(("[%s Detector] Client detected abnormal armor value: %d (Max Expected: %d)"):format(DetectorName, currentArmor, maxExpectedArmor), 3)
+    end
 
-    -- Update local state
-    Detector.state.health = health
+    -- Update the detector's local state for the next check.
+    Detector.state.lastHealth = currentHealth
+
+    return true -- Indicate check cycle completed (doesn't imply cheat/no cheat here).
 end
 
--- Get detector status
+--[[
+    (Optional) GetStatus Function
+    Provides current status information for this detector.
+    @return (table): Status details.
+]]
 function Detector.GetStatus()
     return {
         active = Detector.active,
         lastCheck = Detector.lastCheck,
-        interval = Detector.interval
+        interval = Detector.interval,
+        lastHealth = Detector.state.lastHealth
     }
 end
 
--- Registration is now handled centrally by client_main.lua
--- The self-registration thread below has been removed.
+-- Return the Detector table for the registry.
+return Detector

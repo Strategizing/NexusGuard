@@ -1,149 +1,175 @@
-local DetectorName = "noclip" -- Match the key in Config.Detectors
-local NexusGuard = nil -- Local variable to hold the NexusGuard instance
+--[[
+    NexusGuard Noclip Detector (client/detectors/noclip_detector.lua)
 
+    Purpose:
+    - Attempts to detect noclip cheats by checking the player's vertical distance
+      from the ground and their vertical velocity.
+    - Excludes various legitimate states where the player might be off the ground
+      (in vehicle, falling, jumping, climbing, ragdolling, etc.).
+
+    Note on Reporting & Reliability:
+    - This detector previously used `NexusGuard:ReportCheat`. However, client-side position
+      and ground checks can be unreliable or bypassed. Reporting has been removed.
+    - Server-side validation, particularly using raycasting as implemented in
+      `server/modules/detections.lua` (handling `NEXUSGUARD_POSITION_UPDATE`), is the
+      more robust method for detecting noclip/teleportation through objects.
+    - This client-side check remains as a potential heuristic or for local logging,
+      but it does not trigger direct anti-cheat actions. False positives are possible,
+      especially with complex map geometry or custom movement mechanics.
+]]
+
+local DetectorName = "noclip" -- Unique key for this detector
+local NexusGuard = nil -- Local reference to the main NexusGuard client instance
+
+-- Detector module table
 local Detector = {
-    active = false,
-    interval = 1000, -- Default, will be overridden by config if available
-    lastCheck = 0
+    active = false,     -- Is the detector currently running? Set by Start/Stop.
+    interval = 1000,    -- Default check interval (ms). Overridden by config.
+    lastCheck = 0       -- Timestamp of the last check.
+    -- No specific local state needed for this basic check
 }
 
--- Initialize the detector (called once by the registry)
--- Receives the NexusGuard instance from the registry
+--[[
+    Initialization Function
+    Called by the DetectorRegistry during startup.
+    @param nexusGuardInstance (table): The main NexusGuard client instance.
+]]
 function Detector.Initialize(nexusGuardInstance)
     if not nexusGuardInstance then
-        print("^1[NexusGuard:" .. DetectorName .. "] CRITICAL: Failed to receive NexusGuard instance during initialization.^7")
+        print(("^1[NexusGuard:%s] CRITICAL: Failed to receive NexusGuard instance during initialization.^7"):format(DetectorName))
         return false
     end
-    NexusGuard = nexusGuardInstance -- Store the instance locally
+    NexusGuard = nexusGuardInstance -- Store the reference.
 
-    -- Update interval from global config if available
-    -- Access Config via the passed instance
+    -- Read configuration (interval) via the NexusGuard instance.
     local cfg = NexusGuard.Config
-    if cfg and cfg.Detectors and cfg.Detectors.noclip and NexusGuard.intervals and NexusGuard.intervals.noclip then
-        Detector.interval = NexusGuard.intervals.noclip
-    end
-    print("^2[NexusGuard:" .. DetectorName .. "]^7 Initialized with interval: " .. Detector.interval .. "ms")
+    Detector.interval = (cfg and cfg.Intervals and cfg.Intervals[DetectorName]) or Detector.interval
+
+    Log(("[%s Detector] Initialized. Interval: %dms"):format(DetectorName, Detector.interval), 3)
     return true
 end
 
--- Start the detector (Called by Registry)
--- The registry now handles the thread creation loop.
+--[[
+    Start Function
+    Called by the DetectorRegistry to activate the detector.
+]]
 function Detector.Start()
     if Detector.active then return false end -- Already active
+    Log(("[%s Detector] Starting checks..."):format(DetectorName), 3)
     Detector.active = true
-    -- No need to create thread here, registry does it.
-    -- Print statement moved to registry for consistency.
-    return true -- Indicate success
+    Detector.lastCheck = 0
+    return true -- Indicate successful start
 end
 
--- Stop the detector (Called by Registry)
--- The registry relies on this setting the active flag to false.
+--[[
+    Stop Function
+    Called by the DetectorRegistry to deactivate the detector.
+]]
 function Detector.Stop()
     if not Detector.active then return false end -- Already stopped
+    Log(("[%s Detector] Stopping checks..."):format(DetectorName), 3)
     Detector.active = false
-    -- Print statement moved to registry for consistency.
-    return true -- Indicate success
+    return true -- Indicate successful stop signal
 end
 
--- Check for violations (Moved logic from client_main.lua)
+--[[
+    Core Check Function
+    Called periodically by the DetectorRegistry's managed thread.
+    Checks player's height above ground and vertical velocity, excluding legitimate states.
+    NOTE: Does NOT report cheats; relies on server-side validation.
+]]
 function Detector.Check()
-    -- Ensure NexusGuard instance is available
+    -- Ensure NexusGuard instance is available.
     if not NexusGuard then
-        print("^1[NexusGuard:" .. DetectorName .. "] Error: NexusGuard instance not available in Check function.^7")
-        return
+        -- print(("^1[NexusGuard:%s] Error: NexusGuard instance not available in Check function.^7"):format(DetectorName))
+        return true -- Skip check if core instance is missing
     end
 
-    -- Cache config values locally
-    -- Access Config via the stored NexusGuard instance
+    -- Access config thresholds via the stored NexusGuard instance.
     local cfg = NexusGuard.Config
+    -- Tolerance for how far above the ground is considered suspicious when stationary.
     local noclipTolerance = (cfg and cfg.Thresholds and cfg.Thresholds.noclipTolerance) or 3.0
 
-    local ped = PlayerPedId()
+    local playerPed = PlayerPedId()
 
-    -- Safety checks
-    if not DoesEntityExist(ped) then return end
-    if GetVehiclePedIsIn(ped, false) ~= 0 then return end -- Ignore if in vehicle
-    if IsEntityDead(ped) then return end
-    if IsPedInParachuteFreeFall(ped) then return end -- Ignore during parachute
-    if IsPedFalling(ped) then return end -- Ignore if falling
-    if IsPedJumping(ped) then return end -- Ignore if jumping
-    if IsPedClimbing(ped) then return end -- Ignore if climbing
-    if IsPedVaulting(ped) then return end -- Ignore if vaulting
-    if IsPedDiving(ped) then return end -- Ignore if diving
-    if IsPedGettingUp(ped) then return end -- Ignore if getting up
-    if IsPedRagdoll(ped) then return end -- Ignore if ragdolling
+    -- 1. Exclude Legitimate States: Check various conditions where being off the ground is normal.
+    if not DoesEntityExist(playerPed) then return true end -- Ped doesn't exist
+    if GetVehiclePedIsIn(playerPed, false) ~= 0 then return true end -- In a vehicle
+    if IsEntityDead(playerPed) then return true end -- Dead
+    if IsPedInParachuteFreeFall(playerPed) then return true end -- Parachuting
+    if IsPedFalling(playerPed) then return true end -- Falling
+    if IsPedJumping(playerPed) then return true end -- Jumping
+    if IsPedClimbing(playerPed) then return true end -- Climbing
+    if IsPedVaulting(playerPed) then return true end -- Vaulting
+    if IsPedDiving(playerPed) then return true end -- Diving
+    if IsPedGettingUp(playerPed) then return true end -- Getting up from ragdoll
+    if IsPedRagdoll(playerPed) then return true end -- Ragdolling
+    if IsPedSwimming(playerPed) then return true end -- Swimming
 
-    local pos = GetEntityCoords(ped)
+    local currentPos = GetEntityCoords(playerPed)
 
-    -- Ensure valid position
-    if not pos or not pos.x then return end
+    -- Ensure position data is valid.
+    if not currentPos or not currentPos.x then return true end
 
-    -- Get ground Z coordinate; use the second parameter `true` for water check as well? Maybe not needed.
-    local foundGround, groundZ = GetGroundZFor_3dCoord(pos.x, pos.y, pos.z, false)
+    -- 2. Get Ground Z Coordinate: Find the ground height below the player.
+    -- The `false` argument means it won't consider water as ground.
+    local foundGround, groundZ = GetGroundZFor_3dCoord(currentPos.x, currentPos.y, currentPos.z, false)
 
-    -- If ground wasn't found nearby, it might indicate being very high up or out of bounds, potentially noclip
-    -- However, this can also happen legitimately (e.g., flying high). Need more checks.
-
+    -- 3. Analyze Position Relative to Ground:
     if foundGround then
-        local distanceToGround = pos.z - groundZ
+        local distanceToGround = currentPos.z - groundZ
 
-        -- Check if player is floating significantly above ground
+        -- Check if the player is significantly above the found ground Z.
         if distanceToGround > noclipTolerance then
-            -- Check if player is in a legitimate state that might cause floating (already checked many above)
-            -- Additional checks: Swimming? Specific animations? (Ejecting check removed as native doesn't exist and other checks cover falling/parachute)
-            if not IsPedSwimming(ped) then
+            -- Player is floating. Check vertical velocity to distinguish from jumping/falling not caught by natives.
+            local _, _, zVelocity = GetEntityVelocity(playerPed)
+            zVelocity = zVelocity or 0
 
-                -- Get vertical velocity to determine if player is stationary or moving slowly upwards/downwards in air
-                local _, _, zVelocity = GetEntityVelocity(ped) -- Assign multiple return values directly
-                zVelocity = zVelocity or 0
+            -- If vertical velocity is low (i.e., not actively moving up/down significantly), it's suspicious.
+            local verticalVelocityThreshold = 0.5 -- Small tolerance for slight vertical movement.
+            if math.abs(zVelocity) < verticalVelocityThreshold then
+                -- Player is floating relatively still above the ground. This is a strong indicator of noclip.
+                local collisionDisabled = GetEntityCollisionDisabled(playerPed) -- Check collision status as extra info.
+                local reason = ("Floating %.1f units above ground with low vertical velocity (%.2f). Collision: %s"):format(
+                    distanceToGround, zVelocity, tostring(collisionDisabled)
+                )
+                -- Log(("[%s Detector] Client detected potential noclip: %s"):format(DetectorName, reason), 2) -- Log locally if desired
 
-                -- If player is floating relatively still vertically (not actively falling/rising from jump/explosion)
-                if math.abs(zVelocity) < 0.5 then -- Increased tolerance slightly from 0.1
-                    -- Check collision status as an additional indicator
-                    local collisionDisabled = GetEntityCollisionDisabled(ped)
-                    local reportReason = "Floating " .. string.format("%.1f", distanceToGround) .. " units above ground with low vertical velocity (" .. string.format("%.2f", zVelocity) .. ")"
-                    if collisionDisabled then
-                        reportReason = reportReason .. " and collision disabled"
-                    end
-
-                    -- Use the stored NexusGuard instance to report
-                    -- NOTE: As per Guideline 31 and the shift towards server authority,
-                    -- client-side reporting for noclip is removed. Server-side validation
-                    -- in the position update handler should handle this detection.
-                    -- if NexusGuard and NexusGuard.ReportCheat then
-                    --     local details = {
-                    --         reason = reportReason,
-                    --         distance = distanceToGround,
-                    --         velocityZ = zVelocity,
-                    --         collision = collisionDisabled
-                    --     }
-                    --     NexusGuard:ReportCheat(DetectorName, details)
-                    -- else
-                    --      print("^1[NexusGuard:" .. DetectorName .. "]^7 Violation: " .. reportReason .. " (NexusGuard instance unavailable)")
-                    -- end
-                end
+                -- NOTE: Reporting removed. Server-side position updates + raycasting is preferred.
+                -- if NexusGuard.ReportCheat then
+                --     NexusGuard:ReportCheat(DetectorName, {
+                --         reason = reason, distance = distanceToGround, velocityZ = zVelocity, collision = collisionDisabled
+                --     })
+                -- end
+                -- return false -- Indicate suspicion for adaptive timing (optional)
             end
         end
     else
-        -- Ground not found - could be very high up (plane, heli) or potential noclip out of bounds.
-        -- Need more context here to avoid false positives. Check altitude, vehicle status again.
-        if GetVehiclePedIsIn(ped, false) == 0 and pos.z > 1000 then -- Arbitrary high altitude check for on-foot
-             -- Maybe add checks for specific interiors where ground Z might fail?
-             -- For now, log potentially suspicious high altitude without ground
-             -- print("^3[NexusGuard:" .. DetectorName .. "]^7 Warning: Ground Z not found for player at high altitude Z=" .. pos.z)
+        -- Ground Z not found. This can happen legitimately when very high up (aircraft)
+        -- or potentially when noclipping far out of bounds or under the map.
+        -- Avoid false positives by adding context checks.
+        if GetVehiclePedIsIn(playerPed, false) == 0 and currentPos.z > 1000 then -- Example: Check if on foot and very high altitude.
+             -- Log(("[%s Detector] Ground Z not found for player on foot at high altitude (Z=%.1f)."):format(DetectorName, currentPos.z), 3)
         end
+        -- Further checks could involve interior checks or distance from known map boundaries.
     end
+
+    return true -- Indicate check cycle completed.
 end
 
-
--- Get detector status
+--[[
+    (Optional) GetStatus Function
+    Provides current status information for this detector.
+    @return (table): Status details.
+]]
 function Detector.GetStatus()
     return {
         active = Detector.active,
         lastCheck = Detector.lastCheck,
         interval = Detector.interval
+        -- Add any noclip-specific state if needed in the future
     }
 end
 
--- Registration is now handled centrally by client_main.lua
--- The self-registration thread below has been removed.
+-- Return the Detector table for the registry.
+return Detector

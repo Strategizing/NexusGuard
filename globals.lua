@@ -1,43 +1,66 @@
 --[[
-    NexusGuard Globals & Server-Side Helpers (Refactored)
-    Contains shared functions and placeholder implementations, organized into modules.
+    NexusGuard Globals & Server API Definition (globals.lua)
+
+    This script serves as the central hub for defining and exposing the server-side API
+    used by NexusGuard's various modules and potentially by external resources.
+
+    Key Responsibilities:
+    - Defines the main `NexusGuardServer` table which acts as a namespace.
+    - Requires and loads core server-side modules (Utils, Permissions, Security, Bans, Database, EventHandlers, Detections).
+    - Assigns the loaded modules as sub-tables within `NexusGuardServer`.
+    - Provides access to the shared `Config` table (loaded from config.lua).
+    - Manages a central list of `OnlineAdmins`.
+    - Implements basic Discord webhook functionality (could be moved to a dedicated module).
+    - Exports the `NexusGuardServer` table via `GetNexusGuardServerAPI` for use by other scripts.
+
+    Developer Notes:
+    - Most of the actual implementation logic resides within the required module files (e.g., sv_bans.lua, modules/detections.lua).
+    - This file primarily acts as an aggregator and exporter.
+    - To access NexusGuard functionality from another server script, use:
+      `local NexusGuardAPI = exports['NexusGuard']:GetNexusGuardServerAPI()`
+      Then access modules like: `NexusGuardAPI.Bans.IsPlayerBanned(...)`
 ]]
 
--- JSON library is expected to be provided by ox_lib (lib.json.encode/decode)
--- local json = _G.json -- REMOVED: Use lib.json directly
+-- External Dependencies (Ensure these resources are started before NexusGuard)
+-- - ox_lib: Provides utility functions, including JSON handling (lib.json) and crypto (lib.crypto).
+-- - oxmysql: Required for database operations.
 
--- Main container for server-side logic and data
+-- Main container table for all server-side NexusGuard modules and shared data.
 local NexusGuardServer = {
-    API = {},
-    Config = _G.Config or {}, -- Still need access to Config loaded from config.lua
-    -- PlayerMetrics = _G.PlayerMetrics or {}, -- REMOVED: Metrics are now handled by PlayerSessionManager in server_main and passed as arguments
-    BanCache = {},
-    BanCacheExpiry = 0,
-    BanCacheDuration = 300, -- Cache duration in seconds (5 minutes)
-    ESX = nil,
-    QBCore = nil,
-    Security = {}, -- Logic moved to sv_security.lua
-    Detections = {}, -- Logic moved to modules/detections.lua
-    Database = {}, -- Logic moved to sv_database.lua
-    Discord = {}, -- Logic moved to sv_discord.lua (or kept here if simple)
-    EventHandlers = {}, -- Logic moved to sv_event_handlers.lua
-    OnlineAdmins = {} -- Central table for online admins
+    Config = _G.Config or {}, -- Reference the global Config table loaded from config.lua. Critical for all modules.
+    OnlineAdmins = {},        -- Central table to track currently online players with admin privileges. Key = server ID, Value = true.
+    -- Sub-tables below will be populated by the required modules:
+    Utils = nil,
+    Permissions = nil,
+    Security = nil,
+    Bans = nil,
+    Database = nil,
+    EventHandlers = nil,
+    Detections = nil,
+    Discord = {}              -- Basic Discord logic kept here for now.
 }
 
--- Load required core modules
+-- Load required core server-side modules.
+-- The order might matter if modules depend on each other during their own initialization.
+-- Utils and Permissions are often needed early.
 local Utils = require('server/sv_utils')
 local Permissions = require('server/sv_permissions')
 local Security = require('server/sv_security')
 local Bans = require('server/sv_bans')
 local Database = require('server/sv_database')
 local EventHandlers = require('server/sv_event_handlers')
-local Detections = require('server/modules/detections') -- Load the existing detections module
--- local Discord = require('server/sv_discord') -- Example if Discord logic is moved
+local Detections = require('server/modules/detections')
+-- local Discord = require('server/sv_discord') -- Example if Discord logic is moved to its own file.
 
--- Local alias for logging
+-- Local alias for logging function from the Utils module.
 local Log = Utils.Log
+if not Log then
+    print("^1[NexusGuard] CRITICAL: Logging function (Utils.Log) not found after requiring sv_utils.lua.^7")
+    Log = function(msg, level) print(msg) end -- Basic fallback
+end
 
--- Assign loaded modules to the main NexusGuardServer table to expose them via the API
+-- Assign the loaded modules to the NexusGuardServer table.
+-- This makes their functions accessible via the exported API.
 NexusGuardServer.Utils = Utils
 NexusGuardServer.Permissions = Permissions
 NexusGuardServer.Security = Security
@@ -45,148 +68,123 @@ NexusGuardServer.Bans = Bans
 NexusGuardServer.Database = Database
 NexusGuardServer.EventHandlers = EventHandlers
 NexusGuardServer.Detections = Detections
--- NexusGuardServer.Discord = Discord -- Assign if moved to its own module
+-- NexusGuardServer.Discord = Discord -- Assign if moved to its own module.
 
--- Attempt to load framework objects (This logic is handled in sv_permissions.lua)
--- Citizen.CreateThread(function()
---     Citizen.Wait(500) -- Short delay
---     if GetResourceState('es_extended') == 'started' then
---         local esxExport = exports['es_extended']
---         if esxExport and esxExport.getSharedObject then
---              NexusGuardServer.ESX = esxExport:getSharedObject()
---              Utils.Log("ESX object loaded for permission checks.", 3) -- Use Utils.Log
---         else
---              Utils.Log("es_extended resource found, but could not get SharedObject.", 2) -- Use Utils.Log
---         end
---     end
---     if GetResourceState('qb-core') == 'started' then
---          local qbExport = exports['qb-core']
---          if qbExport and qbExport.GetCoreObject then
---              NexusGuardServer.QBCore = qbExport:GetCoreObject()
---              Utils.Log("QBCore object loaded for permission checks.", 3) -- Use Utils.Log
---          else
---              Utils.Log("qb-core resource found, but could not get CoreObject.", 2) -- Use Utils.Log
---          end
---     end
--- end)
+-- Note: Framework object loading (ESX, QBCore) is now handled within sv_permissions.lua
+--       during its initialization phase, as it's primarily used for permission checks.
 
 -- #############################################################################
--- ## Bans Module (Logic moved to sv_bans.lua) ##
+-- ## Module Logic Placeholders (Actual logic is in required files) ##
 -- #############################################################################
--- NexusGuardServer.Bans = {} -- Definition moved
--- function NexusGuardServer.Bans.LoadList(forceReload) ... end -- Function moved
--- function NexusGuardServer.Bans.IsPlayerBanned(license, ip, discordId) ... end -- Function moved
--- function NexusGuardServer.Bans.Store(banData) ... end -- Function moved
--- function NexusGuardServer.Bans.Execute(playerId, reason, adminName, durationSeconds) ... end -- Function moved
--- function NexusGuardServer.Bans.Unban(identifierType, identifierValue, adminName) ... end -- Function moved
+-- The sections below are just comments indicating where the logic resides.
+-- No actual functions are defined here anymore.
+
+-- ## Bans Module Logic -> See server/sv_bans.lua ##
+-- ## Permissions Module Logic -> See server/sv_permissions.lua ##
+-- ## Security Module Logic -> See server/sv_security.lua ##
+-- ## Detections Module Logic -> See server/modules/detections.lua ##
+-- ## Database Module Logic -> See server/sv_database.lua ##
+-- ## Event Handlers Module Logic -> See server/sv_event_handlers.lua ##
 
 -- #############################################################################
--- ## Permissions Module (Logic moved to sv_permissions.lua) ##
+-- ## Discord Module (Basic Implementation) ##
 -- #############################################################################
+-- Simple Discord webhook sender. Could be expanded or moved to sv_discord.lua.
+NexusGuardServer.Discord = {
+    rateLimits = {} -- Simple table to track last send time per webhook URL.
+}
 
--- #############################################################################
--- ## Security Module (Logic moved to sv_security.lua) ##
--- #############################################################################
-
--- #############################################################################
--- ## Detections Module (Logic moved to modules/detections.lua) ##
--- #############################################################################
--- NexusGuardServer.Detections = {} -- Definition moved
--- function NexusGuardServer.Detections.Store(playerId, detectionType, detectionData) ... end -- Function moved to sv_database.lua
--- function NexusGuardServer.Detections.GetSeverity(detectionType) ... end -- Function moved
--- function NexusGuardServer.Detections.IsConfirmedCheat(detectionType, detectionData) ... end -- Function moved
--- function NexusGuardServer.Detections.IsHighRisk(detectionType, detectionData) ... end -- Function moved
--- function NexusGuardServer.Detections.ValidateWeaponDamage(playerId, weaponHash, reportedDamage, targetEntity) ... end -- Function moved
--- function NexusGuardServer.Detections.ValidateVehicleHealth(detectionData) ... end -- Function moved
--- function NexusGuardServer.Detections.Process(playerId, detectionType, detectionData, session) ... end -- Function moved
-
--- #############################################################################
--- ## Discord Module (Logic kept here for now, could be moved) ##
--- #############################################################################
-NexusGuardServer.Discord = {}
-
+-- Sends a formatted embed message to a Discord webhook.
+-- @param category (string): Used to look up category-specific webhook in Config.Discord.webhooks (e.g., "bans", "detections").
+-- @param title (string): The title of the embed.
+-- @param message (string): The main content of the embed description (will be truncated if too long).
+-- @param specificWebhook (string, optional): A specific webhook URL to use, overriding category/general config.
 function NexusGuardServer.Discord.Send(category, title, message, specificWebhook)
     local discordConfig = NexusGuardServer.Config and NexusGuardServer.Config.Discord
-    -- Check if Discord integration is enabled globally OR if general logging is enabled
-    if not discordConfig or (not discordConfig.enabled and not NexusGuardServer.Config.EnableDiscordLogs) then return end
+    -- Check if Discord integration is enabled globally OR if general logging via DiscordWebhook is enabled.
+    if not discordConfig or (not discordConfig.enabled and not NexusGuardServer.Config.DiscordWebhook) then return end
 
-    local webhookURL = specificWebhook
+    local webhookURL = specificWebhook -- Use specific URL if provided.
+    -- If no specific URL, determine the correct webhook based on category or general config.
     if not webhookURL or webhookURL == "" then
-        -- Prioritize specific category webhook
+        -- Prioritize category-specific webhook from Config.Discord.webhooks.
         if discordConfig.webhooks and category and discordConfig.webhooks[category] and discordConfig.webhooks[category] ~= "" then
             webhookURL = discordConfig.webhooks[category]
-        -- Fallback to general webhook if category-specific one isn't set
+        -- Fallback to the general Config.DiscordWebhook if category one isn't set or valid.
         elseif NexusGuardServer.Config.DiscordWebhook and NexusGuardServer.Config.DiscordWebhook ~= "" then
             webhookURL = NexusGuardServer.Config.DiscordWebhook
         else
             -- Log("Discord.Send: No valid webhook URL found for category '" .. tostring(category) .. "' or general config.", 3)
-            return -- No valid webhook URL found
+            return -- Exit if no valid webhook URL can be determined.
         end
     end
 
-    if not PerformHttpRequest then Log("^1Error: PerformHttpRequest native not available.^7", 1); return end
-    if not lib.json then Log("^1Error: ox_lib JSON library (lib.json) not available for SendToDiscord.^7", 1); return end
+    -- Ensure required FiveM natives and libraries are available.
+    if not PerformHttpRequest then Log("^1[NexusGuard] Error: PerformHttpRequest native not available. Cannot send Discord message.^7", 1); return end
+    if not lib or not lib.json then Log("^1[NexusGuard] Error: ox_lib JSON library (lib.json) not available. Cannot send Discord message.^7", 1); return end
 
-    -- Basic rate limiting (simple example: max 1 message per second per webhook)
+    -- Basic Rate Limiting: Prevent spamming a single webhook URL (max 1 message per second).
     local rateLimitKey = webhookURL
     local now = GetGameTimer()
-    if not NexusGuardServer.Discord.rateLimits then NexusGuardServer.Discord.rateLimits = {} end
-    if NexusGuardServer.Discord.rateLimits[rateLimitKey] and (now - NexusGuardServer.Discord.rateLimits[rateLimitKey] < 1000) then
-        -- Log("Discord rate limit hit for webhook: " .. webhookURL, 4) -- Debug log
-        return
+    local rateLimits = NexusGuardServer.Discord.rateLimits -- Access the rate limit table.
+    if rateLimits[rateLimitKey] and (now - rateLimits[rateLimitKey] < 1000) then
+        -- Log("Discord rate limit hit for webhook: " .. webhookURL, 4) -- Optional debug log
+        return -- Skip sending if rate limited.
     end
-    NexusGuardServer.Discord.rateLimits[rateLimitKey] = now
+    rateLimits[rateLimitKey] = now -- Update last send time.
 
-    -- Truncate message if too long for Discord embed description
-    local maxLen = 4000 -- Discord description limit is 4096, leave some buffer
+    -- Truncate the message if it exceeds Discord's embed description limit.
+    local maxLen = 4000 -- Leave some buffer below the 4096 limit.
     if #message > maxLen then
-        message = string.sub(message, 1, maxLen - 3) .. "..."
+        message = string.sub(message, 1, maxLen - 3) .. "..." -- Append ellipsis if truncated.
     end
 
+    -- Construct the Discord embed payload.
     local embed = {{
-        ["color"] = 16711680, -- Red default
+        ["color"] = discordConfig.embedColors and discordConfig.embedColors[category] or 16711680, -- Use category color or red default.
         ["title"] = "**[NexusGuard] " .. (title or "Alert") .. "**",
         ["description"] = message or "No details provided.",
         ["footer"] = { ["text"] = "NexusGuard | " .. os.date("%Y-%m-%d %H:%M:%S") }
     }}
+    -- Safely encode the payload to JSON.
     local payloadSuccess, payload = pcall(lib.json.encode, { embeds = embed })
-    if not payloadSuccess then Log("^1Error encoding Discord payload: " .. tostring(payload) .. "^7", 1); return end
+    if not payloadSuccess then Log("^1[NexusGuard] Error encoding Discord payload: " .. tostring(payload) .. "^7", 1); return end
 
+    -- Perform the HTTP request asynchronously.
     local success, err = pcall(PerformHttpRequest, webhookURL, function(errHttp, text, headers)
-        if errHttp ~= 204 and errHttp ~= 200 then -- Check for non-success status codes
-             Log(string.format("^1Error sending Discord webhook (Callback Status %s): %s^7", tostring(errHttp), text), 1)
-        -- else Log("Discord notification sent: " .. title, 3) -- Reduce log spam
+        -- Callback function to handle the HTTP response.
+        -- Discord usually returns 204 No Content on success. 200 OK might also occur.
+        if errHttp ~= 204 and errHttp ~= 200 then
+             Log(string.format("^1[NexusGuard] Error sending Discord webhook (Callback Status %s): %s^7", tostring(errHttp), text), 1)
+        -- else Log("Discord notification sent: " .. title, 3) -- Optional success log (can be spammy).
         end
-    end, 'POST', payload, { ['Content-Type'] = 'application/json' })
-    if not success then Log("^1Error initiating Discord HTTP request: " .. tostring(err) .. "^7", 1) end
-end
+    end, 'POST', payload, { ['Content-Type'] = 'application/json' }) -- Set method, payload, and headers.
 
--- #############################################################################
--- ## Event Handlers Module (Logic moved to sv_event_handlers.lua) ##
--- #############################################################################
--- NexusGuardServer.EventHandlers = {} -- Definition moved
--- function NexusGuardServer.EventHandlers.HandleExplosion(sender, ev, session) ... end -- Function moved
--- function NexusGuardServer.EventHandlers.HandleEntityCreation(entity) ... end -- Function moved
--- function NexusGuardServer.EventHandlers.NotifyAdmins(playerId, detectionType, detectionData) ... end -- Function moved
+    -- Log if the initial pcall to PerformHttpRequest failed.
+    if not success then Log("^1[NexusGuard] Error initiating Discord HTTP request: " .. tostring(err) .. "^7", 1) end
+end
 
 -- #############################################################################
 -- ## Initialization and Exports ##
 -- #############################################################################
 
--- Expose the main server logic table
+-- Export the `NexusGuardServer` table, making all its assigned modules and data
+-- accessible to other server scripts via `exports['NexusGuard']:GetNexusGuardServerAPI()`.
 exports('GetNexusGuardServerAPI', function()
+    Log("GetNexusGuardServerAPI called.", 4) -- Debug log when API is requested
     return NexusGuardServer
 end)
 
-Utils.Log("NexusGuard globals refactored and helpers loaded.", 2) -- Use Utils.Log
+Log("NexusGuard globals.lua processed. Core modules loaded and API table structured.", 2)
 
--- Trigger initial DB load/check after globals are defined
--- Initialize Database after other modules are loaded
+-- Trigger Database Initialization after a short delay.
+-- This ensures that the Config table (needed by DB init) is fully loaded and accessible via NexusGuardServer.Config.
 Citizen.CreateThread(function()
-    Citizen.Wait(500) -- Short delay to ensure Config and API are ready
+    Citizen.Wait(500) -- Wait briefly for everything to settle.
+    Log("Attempting to initialize database module...", 3)
     if NexusGuardServer.Database and NexusGuardServer.Database.Initialize then
-        NexusGuardServer.Database.Initialize()
+        NexusGuardServer.Database.Initialize() -- Call the Initialize function within the Database module.
     else
-        Log("^1[NexusGuard] CRITICAL: Database module or Initialize function not found. Database setup skipped.^7", 1)
+        Log("^1[NexusGuard] CRITICAL: Database module or its Initialize function not found in API. Database setup skipped.^7", 1)
     end
 end)

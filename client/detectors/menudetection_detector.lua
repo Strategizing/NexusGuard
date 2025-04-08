@@ -1,135 +1,150 @@
-local DetectorName = "menuDetection" -- Match the key in Config.Detectors
-local NexusGuard = nil -- Local variable to hold the NexusGuard instance
+--[[
+    NexusGuard Menu Keybind Detector (client/detectors/menudetection_detector.lua)
 
+    Purpose:
+    - Attempts to detect common cheat menus by checking if specific key combinations,
+      often used to open menus, are pressed.
+
+    *** CRITICAL WARNING ***
+    This detection method is EXTREMELY UNRELIABLE and easily bypassed.
+    - Menus can use ANY keybind.
+    - Legitimate resources might use the same keybinds.
+    - This detector should be considered a very low-confidence heuristic at best.
+
+    RECOMMENDATION:
+    - The primary and most effective method for blocking known cheat menus is to use the
+      Resource Verification feature (`Config.Features.resourceVerification`) with `mode = "blacklist"`
+      and add the known resource names of cheat menus to the `blacklist` table in `config.lua`.
+    - Do NOT rely solely on this keybind detector for menu protection.
+]]
+
+local DetectorName = "menuDetection" -- Unique key for this detector
+local NexusGuard = nil -- Local reference to the main NexusGuard client instance
+
+-- Detector module table
 local Detector = {
-    active = false,
-    interval = 10000, -- Default, will be overridden by config if available
-    lastCheck = 0
+    active = false,     -- Is the detector currently running? Set by Start/Stop.
+    interval = 100,     -- Check interval (ms). Check frequently for key presses. Overridden by config.
+    lastCheck = 0       -- Timestamp of the last check.
 }
 
--- Initialize the detector (called once by the registry)
--- Receives the NexusGuard instance from the registry
+--[[
+    Initialization Function
+    Called by the DetectorRegistry during startup.
+    @param nexusGuardInstance (table): The main NexusGuard client instance.
+]]
 function Detector.Initialize(nexusGuardInstance)
     if not nexusGuardInstance then
-        print("^1[NexusGuard:" .. DetectorName .. "] CRITICAL: Failed to receive NexusGuard instance during initialization.^7")
+        print(("^1[NexusGuard:%s] CRITICAL: Failed to receive NexusGuard instance during initialization.^7"):format(DetectorName))
         return false
     end
-    NexusGuard = nexusGuardInstance -- Store the instance locally
+    NexusGuard = nexusGuardInstance -- Store the reference.
 
-    -- Update interval from global config if available
-    -- Access Config via the passed instance
+    -- Read configuration (interval) via the NexusGuard instance.
     local cfg = NexusGuard.Config
-    if cfg and cfg.Detectors and cfg.Detectors.menuDetection and NexusGuard.intervals and NexusGuard.intervals.menuDetection then
-        Detector.interval = NexusGuard.intervals.menuDetection
-    end
-    print("^2[NexusGuard:" .. DetectorName .. "]^7 Initialized with interval: " .. Detector.interval .. "ms")
+    Detector.interval = (cfg and cfg.Intervals and cfg.Intervals[DetectorName]) or Detector.interval
+
+    Log(("[%s Detector] Initialized. Interval: %dms. WARNING: This detector is unreliable; use resource blacklist primarily.^7"):format(DetectorName, Detector.interval), 2)
     return true
 end
 
--- Start the detector (Called by Registry)
--- The registry now handles the thread creation loop.
+--[[
+    Start Function
+    Called by the DetectorRegistry to activate the detector.
+]]
 function Detector.Start()
     if Detector.active then return false end -- Already active
+    Log(("[%s Detector] Starting checks..."):format(DetectorName), 3)
     Detector.active = true
-    -- No need to create thread here, registry does it.
-    -- Print statement moved to registry for consistency.
-    return true -- Indicate success
+    Detector.lastCheck = 0
+    return true -- Indicate successful start
 end
 
--- Stop the detector (Called by Registry)
--- The registry relies on this setting the active flag to false.
+--[[
+    Stop Function
+    Called by the DetectorRegistry to deactivate the detector.
+]]
 function Detector.Stop()
     if not Detector.active then return false end -- Already stopped
+    Log(("[%s Detector] Stopping checks..."):format(DetectorName), 3)
     Detector.active = false
-    -- Print statement moved to registry for consistency.
-    return true -- Indicate success
+    return true -- Indicate successful stop signal
 end
 
--- Check for violations
+--[[
+    Core Check Function
+    Called periodically by the DetectorRegistry's managed thread.
+    Checks if any predefined key combinations are pressed.
+]]
 function Detector.Check()
-    -- Basic check for common mod menu key combinations.
-    -- WARNING: This method is extremely unreliable and easily bypassed by changing keybinds.
-    -- The most effective way to block known menus is by adding their resource names
-    -- to the `Config.Features.resourceVerification.blacklist` in config.lua and enabling resource verification.
-    -- Relying on keybinds alone is not recommended for serious protection.
+    -- Ensure NexusGuard instance is available.
+    if not NexusGuard then return true end -- Skip check if core instance is missing.
 
-    -- Control IDs can be found here: https://docs.fivem.net/docs/game-references/controls/
+    -- List of common key combinations to check.
+    -- Control IDs: https://docs.fivem.net/docs/game-references/controls/
+    -- Add/remove combinations cautiously, considering potential conflicts and low reliability.
     local controlsToCheck = {
-        -- Example: HOME key (often used with another key) - INPUT_FRONTEND_SOCIAL_CLUB (213)
-        { name = "HOME + E", justPressed = 213, pressed = 38 }, -- 38 = INPUT_PICKUP (E)
-        -- Example: F5 key (common menu toggle) - INPUT_FRONTEND_PAUSE_ALTERNATE (244)
-        { name = "F5", justPressed = 244 },
-        -- Example: Numpad * (common menu toggle) - INPUT_MULTIPLAYER_INFO (243)
-        { name = "Numpad *", justPressed = 243 },
-        -- Example: Insert key (common menu toggle) - INPUT_FRONTEND_SOCIAL_CLUB_SECONDARY (214)
-        { name = "Insert", justPressed = 214 },
-        -- Add more common combinations if desired, but remember the limitations.
+        -- { name = "HOME + E", justPressed = 213, pressed = 38 }, -- INPUT_FRONTEND_SOCIAL_CLUB + INPUT_PICKUP
+        { name = "F5", justPressed = 244 }, -- INPUT_FRONTEND_PAUSE_ALTERNATE
+        { name = "Numpad *", justPressed = 243 }, -- INPUT_MULTIPLAYER_INFO
+        { name = "Insert", justPressed = 214 }, -- INPUT_FRONTEND_SOCIAL_CLUB_SECONDARY
+        -- { name = "F8", justPressed = 212 }, -- INPUT_FRONTEND_CONSOLE (Example - likely conflicts)
+        -- Add more combinations here if absolutely necessary, understanding the risks.
     }
 
     for _, combo in ipairs(controlsToCheck) do
         local trigger = false
+        -- Check if it's a combination (one key just pressed, another held down).
         if combo.pressed then
-            -- Check for combination (one just pressed, one held)
             if IsControlJustPressed(0, combo.justPressed) and IsControlPressed(0, combo.pressed) then
                 trigger = true
             end
+        -- Check if it's a single key press.
         else
-            -- Check for single key press
             if IsControlJustPressed(0, combo.justPressed) then
                 trigger = true
             end
         end
 
+        -- If a defined combination was triggered, report it.
         if trigger then
-            if NexusGuard and NexusGuard.ReportCheat then
-                local details = { keyCombo = combo.name, control1 = combo.justPressed }
-                if combo.pressed then details.control2 = combo.pressed end
+            Log(("[%s Detector] Potential menu keybind pressed: %s"):format(DetectorName, combo.name), 1)
+            if NexusGuard.ReportCheat then
+                local details = {
+                    keyCombo = combo.name,
+                    controlJustPressed = combo.justPressed,
+                    controlPressed = combo.pressed -- Will be nil for single key presses
+                }
+                -- Report with details. Server-side validation is minimal for this type.
                 NexusGuard:ReportCheat(DetectorName, details)
-            else
-                print("^1[NexusGuard:" .. DetectorName .. "]^7 Violation: Potential mod menu key combination detected (" .. combo.name .. ") (NexusGuard instance unavailable)")
             end
-            return -- Report once per check cycle if a combo is found
+            -- Return false to potentially trigger faster re-checks (adaptive timing in template).
+            -- Consider returning true if reporting is sufficient and faster checks aren't needed.
+            return false
         end
     end
 
-    -- TODO: Add more sophisticated checks (See comments below - Guideline 34):
-    -- 1. Monitor for blacklisted natives frequently used by menus (e.g., drawing natives, certain SET_* natives).
-    --    - NOTE: Directly hooking arbitrary native calls from Lua is generally not feasible or reliable in FiveM.
-    --    - Focus should be on detecting the *results* of menu actions or the menu resource itself (via resourcemonitor).
-    -- 2. Check for suspicious global variable modifications.
-    --    - Example: Some menus might set global flags like _SOME_MENU_ACTIVE = true
-    -- 3. Look for unexpected UI elements or scaleforms.
-    --    - Requires identifying specific scaleforms used by common menus.
-    -- 4. Analyze registered commands/keybinds for suspicious patterns.
-    --    - Could involve iterating through registered commands/keys, but might be performance-intensive.
+    -- [[ Future / More Advanced (Difficult) Checks - Guideline 34 ]]
+    -- The following ideas are complex and often unreliable in the Lua environment:
+    -- 1. Blacklisted Natives: Directly hooking/monitoring arbitrary native calls from Lua is generally
+    --    not feasible or allowed by FiveM's Lua runtime for security reasons. Focus should remain
+    --    on detecting the *effects* of cheats or the cheat resource itself.
+    -- 2. Global Variable Monitoring: Iterating through the global environment (`_G`) to find suspicious
+    --    variables added by menus is possible but can be performance-intensive and easily bypassed.
+    -- 3. UI/Scaleform Detection: Identifying specific scaleforms used by menus requires knowing the
+    --    exact scaleform names and checking if they are active, which is fragile.
+    -- 4. Command/Keybind Analysis: Iterating through registered commands or key mappings might reveal
+    --    suspicious entries but is complex and potentially slow.
 
-    -- Example: F5 key (commonly used) - INPUT_FRONTEND_PAUSE_ALTERNATE (244)
-    if IsControlJustPressed(0, 244) then
-         if NexusGuard and NexusGuard.ReportCheat then
-            local details = { keyCombo = "F5", control1 = 244 }
-            NexusGuard:ReportCheat(DetectorName, details)
-        else
-            print("^1[NexusGuard:" .. DetectorName .. "]^7 Violation: Potential mod menu key combination detected (F5) (NexusGuard instance unavailable)")
-        end
-        return
-    end
-
-    -- TODO: Add more sophisticated checks:
-    -- 1. Monitor for blacklisted natives frequently used by menus (e.g., drawing natives, certain SET_* natives).
-    --    - NOTE (Guideline 34): Directly hooking arbitrary native calls from Lua is generally not feasible or reliable in FiveM.
-    --    - It often requires external tools or memory manipulation, which NexusGuard aims to detect, not perform.
-    --    - Focus should be on detecting the *results* of menu actions or the menu resource itself (via resourcemonitor).
-    -- 2. Check for suspicious global variable modifications.
-    --    - Example: Some menus might set global flags like _SOME_MENU_ACTIVE = true
-    -- 3. Look for unexpected UI elements or scaleforms.
-    --    - Requires identifying specific scaleforms used by common menus.
-    -- 4. Analyze registered commands/keybinds for suspicious patterns.
-    --    - Could involve iterating through registered commands/keys, but might be performance-intensive.
-
+    -- If no suspicious keybinds were detected in this cycle.
+    return true
 end
 
-
--- Get detector status
+--[[
+    (Optional) GetStatus Function
+    Provides current status information for this detector.
+    @return (table): Status details.
+]]
 function Detector.GetStatus()
     return {
         active = Detector.active,
@@ -138,5 +153,5 @@ function Detector.GetStatus()
     }
 end
 
--- Registration is now handled centrally by client_main.lua
--- The self-registration thread below has been removed.
+-- Return the Detector table for the registry.
+return Detector
