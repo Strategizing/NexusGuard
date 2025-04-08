@@ -97,9 +97,9 @@ NexusGuardServer.Discord = {
 -- Sends a formatted embed message to a Discord webhook.
 -- @param category (string): Used to look up category-specific webhook in Config.Discord.webhooks (e.g., "bans", "detections").
 -- @param title (string): The title of the embed.
--- @param message (string): The main content of the embed description (will be truncated if too long).
+-- @param messageOrData (string|table): The main content (string) or a table of embed fields { {name=string, value=string, inline=bool}, ... }.
 -- @param specificWebhook (string, optional): A specific webhook URL to use, overriding category/general config.
-function NexusGuardServer.Discord.Send(category, title, message, specificWebhook)
+function NexusGuardServer.Discord.Send(category, title, messageOrData, specificWebhook)
     local discordConfig = NexusGuardServer.Config and NexusGuardServer.Config.Discord
     -- Check if Discord integration is enabled globally OR if general logging via DiscordWebhook is enabled.
     if not discordConfig or (not discordConfig.enabled and not NexusGuardServer.Config.DiscordWebhook) then return end
@@ -133,21 +133,44 @@ function NexusGuardServer.Discord.Send(category, title, message, specificWebhook
     end
     rateLimits[rateLimitKey] = now -- Update last send time.
 
-    -- Truncate the message if it exceeds Discord's embed description limit.
-    local maxLen = 4000 -- Leave some buffer below the 4096 limit.
-    if #message > maxLen then
-        message = string.sub(message, 1, maxLen - 3) .. "..." -- Append ellipsis if truncated.
-    end
-
-    -- Construct the Discord embed payload.
-    local embed = {{
+    -- Construct the Discord embed payload based on whether messageOrData is a string or table.
+    local embedPayload = {
         ["color"] = discordConfig.embedColors and discordConfig.embedColors[category] or 16711680, -- Use category color or red default.
         ["title"] = "**[NexusGuard] " .. (title or "Alert") .. "**",
-        ["description"] = message or "No details provided.",
         ["footer"] = { ["text"] = "NexusGuard | " .. os.date("%Y-%m-%d %H:%M:%S") }
-    }}
+    }
+
+    if type(messageOrData) == "table" then
+        -- New format: Use fields from the table.
+        embedPayload.fields = {}
+        for _, fieldData in ipairs(messageOrData) do
+            -- Ensure value is a string and truncate if necessary.
+            local fieldValue = tostring(fieldData.value or "")
+            local maxFieldLen = 1000 -- Leave buffer below 1024 limit.
+            if #fieldValue > maxFieldLen then
+                fieldValue = string.sub(fieldValue, 1, maxFieldLen - 3) .. "..."
+            end
+            table.insert(embedPayload.fields, {
+                name = tostring(fieldData.name or "Field"),
+                value = fieldValue,
+                inline = fieldData.inline or false
+            })
+        end
+    elseif type(messageOrData) == "string" then
+        -- Old format: Use the string as the description.
+        local message = messageOrData
+        local maxDescLen = 4000 -- Leave buffer below 4096 limit.
+        if #message > maxDescLen then
+            message = string.sub(message, 1, maxDescLen - 3) .. "..."
+        end
+        embedPayload.description = message
+    else
+        -- Fallback if data is neither string nor table.
+        embedPayload.description = "Invalid data format received."
+    end
+
     -- Safely encode the payload to JSON.
-    local payloadSuccess, payload = pcall(lib.json.encode, { embeds = embed })
+    local payloadSuccess, payload = pcall(lib.json.encode, { embeds = { embedPayload } }) -- Note: embeds is an array containing the single embed object.
     if not payloadSuccess then Log("^1[NexusGuard] Error encoding Discord payload: " .. tostring(payload) .. "^7", 1); return end
 
     -- Perform the HTTP request asynchronously.

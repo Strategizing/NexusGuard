@@ -116,15 +116,19 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
 
     -- Send Discord Notification via Discord module API.
     if NexusGuardServer.Discord and NexusGuardServer.Discord.Send then
-        local discordMsg = string.format(
-            "**Player:** %s (`%d`)\n**Detection:** %s\n**Severity:** %s\n**Reason:** %s\n**Details:** `%s`\n**Trust Score:** %.1f (`-%d`)",
-            playerName, playerId, detectionType, severity, reason, detailsJson,
-            session and session.metrics and session.metrics.trustScore or -1.0, -- Show current score or -1 if unavailable
-            trustImpact
-        )
+        -- Prepare data for embed fields
+        local embedData = {
+            { name = "Player", value = string.format("%s (`%d`)", playerName, playerId), inline = true },
+            { name = "Detection", value = detectionType, inline = true },
+            { name = "Severity", value = severity, inline = true },
+            { name = "Reason", value = reason, inline = false },
+            { name = "Details", value = string.format("```json\n%s\n```", detailsJson), inline = false }, -- Use code block for JSON
+            { name = "Trust Score", value = string.format("%.1f (`-%d`)", session and session.metrics and session.metrics.trustScore or -1.0, trustImpact), inline = true }
+        }
         -- Determine the correct webhook URL (category-specific or general).
         local webhook = NexusGuardServer.Config.Discord and NexusGuardServer.Config.Discord.webhooks and NexusGuardServer.Config.Discord.webhooks.detections
-        NexusGuardServer.Discord.Send("detections", "Suspicious Activity Detected", discordMsg, webhook)
+        -- Pass the embedData table instead of the formatted string
+        NexusGuardServer.Discord.Send("detections", "Suspicious Activity Detected", embedData, webhook)
     end
 
     -- Execute Actions (Ban/Kick) based on trust score thresholds defined in config.
