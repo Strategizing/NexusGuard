@@ -31,9 +31,12 @@ end
 -- Provides access to core functions and state for detectors.
 _G.NexusGuard = _G.NexusGuard or {}
 
--- Global Detector Registry (Populated by shared/detector_registry.lua)
--- Manages the registration and lifecycle of individual detector modules.
-_G.DetectorRegistry = _G.DetectorRegistry or {}
+-- Detector Registry Module
+local DetectorRegistry = require('shared/detector_registry')
+if not DetectorRegistry then
+    print("^1[NexusGuard] CRITICAL: Failed to load shared/detector_registry.lua. Detector management will fail.^7")
+    -- Consider halting initialization if the registry is crucial.
+end
 
 
 -- Environment Check & Debug Compatibility
@@ -162,7 +165,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             -- 3. Add `Config.Detectors.mydetector = true` (or false) to config.lua.
         }
     }
-    _G.NexusGuard = NexusGuardInstance -- Assign the instance to the global variable for access by detectors
+    -- _G.NexusGuard = NexusGuardInstance -- REMOVED: Avoid global assignment. Instance passed via Initialize.
 
     --[[
         Safe Detection Wrapper (Called by detector threads)
@@ -269,8 +272,19 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             -- Start auxiliary protection modules (e.g., Rich Presence).
             self:StartProtectionModules()
 
-            -- Load and start individual detectors based on config.lua settings.
-            self:StartDetectors()
+            -- Pass the NexusGuard instance to the DetectorRegistry
+            if DetectorRegistry and DetectorRegistry.SetNexusGuardInstance then
+                DetectorRegistry:SetNexusGuardInstance(self)
+            else
+                print("^1[NexusGuard] CRITICAL: DetectorRegistry or SetNexusGuardInstance function not found. Cannot initialize detectors.^7")
+            end
+
+            -- Load and start individual detectors based on config.lua settings using the registry module.
+            if DetectorRegistry and DetectorRegistry.StartEnabledDetectors then
+                DetectorRegistry:StartEnabledDetectors()
+            else
+                 print("^1[NexusGuard] CRITICAL: DetectorRegistry or StartEnabledDetectors function not found. Cannot start detectors.^7")
+            end
 
             -- Start a periodic thread to send position and health updates to the server.
             Citizen.CreateThread(function()
@@ -325,9 +339,9 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                 local success, detectorModule = pcall(require, filePath)
 
                 if success and type(detectorModule) == "table" then
-                    -- Register the loaded detector module with the global DetectorRegistry.
-                    if _G.DetectorRegistry and type(_G.DetectorRegistry.Register) == "function" then
-                        local regSuccess, regErr = pcall(_G.DetectorRegistry.Register, detectorName, detectorModule)
+                    -- Register the loaded detector module with the DetectorRegistry module.
+                    if DetectorRegistry and type(DetectorRegistry.Register) == "function" then
+                        local regSuccess, regErr = pcall(DetectorRegistry.Register, detectorName, detectorModule)
                         if not regSuccess then
                              print(("^1[NexusGuard] Error registering detector '%s' with registry: %s^7"):format(detectorName, tostring(regErr)))
                              goto continue -- Skip this detector if registration fails.
@@ -335,7 +349,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                              print(("^2[NexusGuard]^7 Detector '%s' registered successfully.^7"):format(detectorName))
                         end
                     else
-                        print(("^1[NexusGuard] CRITICAL: _G.DetectorRegistry or its Register function not found. Cannot register detector '%s'.^7"):format(detectorName))
+                        print(("^1[NexusGuard] CRITICAL: DetectorRegistry module or its Register function not found. Cannot register detector '%s'.^7"):format(detectorName))
                         goto continue -- Skip if registry is unavailable.
                     end
 

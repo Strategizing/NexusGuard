@@ -23,6 +23,7 @@ server_scripts {
     'server/sv_security.lua',
     'server/sv_bans.lua',
     'server/sv_database.lua', -- Load new database module
+    'server/sv_discord.lua', -- Load new Discord module
     'server/sv_event_handlers.lua', -- Load new event handlers module
     'server/modules/*.lua',  -- Load other modules (like detections)
     'server/server_main.lua' -- Load main server logic last

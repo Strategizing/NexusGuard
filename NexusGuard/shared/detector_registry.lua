@@ -30,8 +30,7 @@ local DetectorRegistry = {
     activeThreads = {},    -- Stores active Citizen thread IDs for each running detector, keyed by name.
     nexusGuardInstance = nil -- Holds the reference to the main NexusGuard client instance.
 }
--- Expose the registry globally. Consider alternatives like exports if broader access is needed later.
-_G.DetectorRegistry = DetectorRegistry
+-- REMOVED: _G.DetectorRegistry = DetectorRegistry -- Avoid global assignment
 
 --[[
     Sets the reference to the main NexusGuard client instance.
@@ -332,3 +331,6 @@ end)
 
 -- Note: Initialization logic (like StartEnabledDetectors) is no longer called directly within this file.
 -- It's expected to be called from client_main.lua after the NexusGuard instance is set.
+
+-- Return the registry table so it can be used as a module
+return DetectorRegistry

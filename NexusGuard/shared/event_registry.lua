@@ -23,6 +23,10 @@
       Using the registry for local events is mainly for consistency if preferred.
 ]]
 
+-- Load the natives wrapper using the module loader
+local ModuleLoader = require('shared/module_loader')
+local Natives = ModuleLoader.Load('shared/natives', true) -- Load as optional to avoid circular dependency
+
 local EventRegistry = {}
 
 -- Base prefix for all NexusGuard network events.
@@ -106,7 +110,12 @@ end
 function EventRegistry:RegisterEvent(eventKey)
     local eventName = self:GetEventName(eventKey)
     if eventName then
-        RegisterNetEvent(eventName)
+        -- Use Natives wrapper if available, otherwise fall back to direct call
+        if Natives and Natives.RegisterNetEvent then
+            Natives.RegisterNetEvent(eventName)
+        else
+            RegisterNetEvent(eventName)
+        end
         -- print(("^2[NexusGuard EventRegistry] Registered network event: %s (Key: %s)^7"):format(eventName, eventKey)) -- Optional debug log
         return eventName
     end
@@ -122,7 +131,12 @@ end
 function EventRegistry:AddEventHandler(eventKey, handler)
     local eventName = self:GetEventName(eventKey)
     if eventName then
-        AddEventHandler(eventName, handler)
+        -- Use Natives wrapper if available, otherwise fall back to direct call
+        if Natives and Natives.AddEventHandler then
+            Natives.AddEventHandler(eventName, handler)
+        else
+            AddEventHandler(eventName, handler)
+        end
         -- print(("^2[NexusGuard EventRegistry] Added handler for event: %s (Key: %s)^7"):format(eventName, eventKey)) -- Optional debug log
         return true
     end
@@ -140,7 +154,12 @@ end
 function EventRegistry:TriggerServerEvent(eventKey, ...)
     local eventName = self:GetEventName(eventKey)
     if eventName then
-        TriggerServerEvent(eventName, ...)
+        -- Use Natives wrapper if available, otherwise fall back to direct call
+        if Natives and Natives.TriggerServerEvent then
+            Natives.TriggerServerEvent(eventName, ...)
+        else
+            TriggerServerEvent(eventName, ...)
+        end
         return true
     end
     print(("^1[NexusGuard EventRegistry] Error: Failed to trigger unknown server event key: %s^7"):format(tostring(eventKey)))
@@ -158,10 +177,15 @@ end
 function EventRegistry:TriggerClientEvent(eventKey, target, ...)
     local eventName = self:GetEventName(eventKey)
     if eventName then
-        TriggerClientEvent(eventName, target, ...)
+        -- Use Natives wrapper if available, otherwise fall back to direct call
+        if Natives and Natives.TriggerClientEvent then
+            Natives.TriggerClientEvent(eventName, target, ...)
+        else
+            TriggerClientEvent(eventName, target, ...)
+        end
         return true
     end
-     print(("^1[NexusGuard EventRegistry] Error: Failed to trigger unknown client event key: %s for target %s^7"):format(tostring(eventKey), tostring(target)))
+    print(("^1[NexusGuard EventRegistry] Error: Failed to trigger unknown client event key: %s for target %s^7"):format(tostring(eventKey), tostring(target)))
     return false
 end
 

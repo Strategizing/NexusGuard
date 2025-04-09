@@ -1,8 +1,8 @@
-# NexusGuard - Modular FiveM Anti-Cheat Framework (v0.7.0)
+# NexusGuard - Modular FiveM Anti-Cheat Framework
 
-NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM servers. It provides a core structure and several basic detection modules, intended to be customized and extended by server developers.
+NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM servers. It provides a core structure and detection modules that can be customized and extended by server developers.
 
-**⚠️ This is an open-source framework, not a plug-and-play solution. ⚠️** It requires careful configuration and **significant implementation** of server-specific logic (permissions, bans, database integration, **critical security measures**) to function effectively and securely. **Do not deploy this on a live server without addressing the security placeholders.**
+**⚠️ This is a framework resource for FiveM servers, not a standalone solution. ⚠️** It requires proper configuration and integration with your server's existing systems (permissions, bans, database) to function effectively.
 
 ## Features (Core Framework)
 

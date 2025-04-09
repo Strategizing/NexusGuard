@@ -64,8 +64,8 @@ end)
 -- explosionEvent: Handles explosion events, passing data to the event handlers module via API.
 AddEventHandler('explosionEvent', function(sender, ev)
     local source = tonumber(sender)
-    -- Retrieve the player's session data using the local PlayerSessionManager.
-    local session = PlayerSessionManager.GetSession(source)
+    -- Retrieve the player's session data using the API.
+    local session = NexusGuardServer.GetSession(source)
     -- Call the HandleExplosion function from the EventHandlers module via the API, passing the session.
     if NexusGuardServer.EventHandlers and NexusGuardServer.EventHandlers.HandleExplosion then
         NexusGuardServer.EventHandlers.HandleExplosion(sender, ev, session)
@@ -80,41 +80,7 @@ end)
 -- Tracks clients that have successfully requested and received a security token.
 local ClientsLoaded = {}
 
---[[
-    Player Session Management (Local to server_main.lua)
-    Manages temporary data associated with each connected player's session.
-    This data is primarily stored in the `metrics` sub-table.
-]]
-local PlayerSessionManager = {}
-PlayerSessionManager.sessions = {} -- Stores session data, keyed by player server ID.
-
--- Gets or creates a session table for a given player ID.
-PlayerSessionManager.GetSession = function(playerId)
-    playerId = tonumber(playerId) -- Ensure playerId is a number
-    if not playerId or playerId <= 0 then return nil end -- Basic validation
-
-    if not PlayerSessionManager.sessions[playerId] then
-        -- Initialize a new session structure if one doesn't exist.
-        PlayerSessionManager.sessions[playerId] = {
-            metrics = {}, -- Holds various tracking data (position, health, detections, etc.)
-            -- Add other session-specific data here if needed (e.g., temporary flags).
-        }
-        -- Log(("^2[NexusGuard] Created new session for player ID %d.^7"):format(playerId), 3)
-    end
-    return PlayerSessionManager.sessions[playerId]
-end
-
--- Clean up session data when a player drops. Hooked into the playerDropped event handler below.
-local function CleanupPlayerSession(playerId)
-    playerId = tonumber(playerId)
-    if not playerId or playerId <= 0 then return end
-
-    if PlayerSessionManager.sessions[playerId] then
-        -- Log(("^2[NexusGuard] Cleaning up session for player ID %d.^7"):format(playerId), 3)
-        PlayerSessionManager.sessions[playerId] = nil -- Remove the session entry.
-    end
-    ClientsLoaded[playerId] = nil -- Also clear from ClientsLoaded table.
-end
+--[[ Player Session Management is now handled by NexusGuardServer.GetSession and NexusGuardServer.CleanupSession in globals.lua ]]
 
 --[[
     Resource Initialization Handler (onResourceStart)
@@ -228,50 +194,24 @@ function OnPlayerConnecting(playerName, setKickReason, deferrals)
     -- Check Admin Status using the Permissions module via API.
     local isAdmin = (NexusGuardServer.Permissions and NexusGuardServer.Permissions.IsAdmin and NexusGuardServer.Permissions.IsAdmin(source)) or false
 
-    -- Initialize Player Session using the local PlayerSessionManager.
-    local session = PlayerSessionManager.GetSession(source)
+    -- Initialize Player Session using the Session module API.
+    local session = NexusGuardServer.Session.GetSession(source)
     if not session then
         Log(("^1[NexusGuard] CRITICAL: Failed to create session for player %s (ID: %d). Aborting connection.^7"):format(playerName, source), 1)
         deferrals.done("Anti-Cheat Error: Failed to initialize player session.")
         return
     end
-    -- Populate the session's metrics table with initial data.
-    session.metrics = {
-        connectTime = os.time(),
-        playerName = playerName,
-        license = license,
-        ip = ip,
-        discord = discord,
-        isAdmin = isAdmin,
-        warningCount = 0,
-        detections = {},          -- Stores details of triggered detections.
-        healthHistory = {},       -- Potentially store recent health changes.
-        movementSamples = {},     -- Potentially store recent movement data.
-        weaponStats = {},         -- Potentially store weapon usage data.
-        behaviorProfile = {},     -- Placeholder for more advanced behavioral analysis.
-        trustScore = 100.0,       -- Initial trust score.
-        securityToken = nil,      -- Will be populated upon successful handshake.
-        lastServerPosition = nil, -- Last position received from the client.
-        lastServerPositionTimestamp = nil,
-        lastServerHealth = nil,   -- Last health received from the client.
-        lastServerArmor = nil,
-        lastServerHealthTimestamp = nil,
-        explosions = {},          -- Track explosion events caused by the player.
-        entities = {},            -- Track entities potentially created by the player.
-        justSpawned = true,       -- Flag for initial spawn grace period (Guideline 27).
-        lastValidPosition = nil   -- Last position deemed valid by server-side checks (Guideline 31).
-    }
 
-    -- Set a timeout to clear the 'justSpawned' flag after a grace period (Guideline 27).
-    local spawnGracePeriod = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.spawnGracePeriod) or 10000 -- Default 10 seconds
-    SetTimeout(spawnGracePeriod, function()
-        -- Need to re-fetch the session in case the player dropped during the timeout.
-        local currentSession = PlayerSessionManager.GetSession(source)
-        if currentSession and currentSession.metrics then
-            currentSession.metrics.justSpawned = false
-            Log(("^2[NexusGuard]^7 Initial spawn grace period (%dms) ended for %s (ID: %d)^7"):format(spawnGracePeriod, playerName, source), 3)
-        end
-    end)
+    -- Update session with additional connection data
+    -- Note: Most of the session initialization is now handled by the Session module
+    session.playerName = playerName
+    session.identifiers.license = license
+    session.identifiers.ip = ip
+    session.identifiers.discord = discord
+    session.isAdmin = isAdmin
+
+    -- Mark the session as active
+    NexusGuardServer.Session.UpdateActivity(source)
 
     -- Track online admins using the table provided by the API.
     if isAdmin then
@@ -297,7 +237,7 @@ function OnPlayerDropped(reason)
     if not source or source <= 0 then return end -- Ignore invalid source IDs.
 
     local playerName = GetPlayerName(source) or ("Unknown Player (" .. source .. ")")
-    local session = PlayerSessionManager.GetSession(source) -- Retrieve the player's session data.
+    local session = NexusGuardServer.GetSession(source) -- Retrieve the player's session data via API.
 
     -- Save player metrics/detection data to the database if enabled and session data exists.
     if NexusGuardServer.Config.Database and NexusGuardServer.Config.Database.enabled and session and session.metrics then
@@ -322,8 +262,12 @@ function OnPlayerDropped(reason)
         Log(("^2[NexusGuard]^7 Player disconnected: %s (ID: %d). Reason: %s^7"):format(playerName, source, reason), 2)
     end
 
-    -- Clean up the player's session data from the local manager.
-    CleanupPlayerSession(source)
+    -- Clean up the player's session data using the Session module API.
+    if NexusGuardServer.Session and NexusGuardServer.Session.CleanupSession then
+        NexusGuardServer.Session.CleanupSession(source)
+    else
+        Log("^1[NexusGuard] CRITICAL: Session.CleanupSession function not found in API! Session cleanup failed.^7", 1)
+    end
 end
 
 --[[
@@ -388,10 +332,10 @@ function RegisterNexusGuardServerEvents()
             return -- Stop processing if token is invalid.
         end
 
-        -- Retrieve the player's session data.
-        local session = PlayerSessionManager.GetSession(source)
+        -- Retrieve the player's session data via API.
+        local session = NexusGuardServer.GetSession(source)
         if not session then
-            Log(("^1[NexusGuard] CRITICAL: Failed to get session for player %s (ID: %d) during DETECTION_REPORT. Aborting processing.^7"):format(playerName, source), 1)
+            Log(("^1[NexusGuard] CRITICAL: Failed to get API session for player %s (ID: %d) during DETECTION_REPORT. Aborting processing.^7"):format(playerName, source), 1)
             return
         end
 
@@ -485,7 +429,7 @@ function RegisterNexusGuardServerEvents()
                     NexusGuardServer.Discord.Send("general", "Resource Mismatch", ("Player: %s (ID: %d)\nReason: %s"):format(playerName, source, reason), NexusGuardServer.Config.Discord.webhooks and NexusGuardServer.Config.Discord.webhooks.general)
                 end
                 -- Process this as a detection event.
-                local session = PlayerSessionManager.GetSession(source)
+                local session = NexusGuardServer.GetSession(source) -- Get session via API
                 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
                     NexusGuardServer.Detections.Process(source, "ResourceMismatch", { mismatched = MismatchedResources, mode = checkMode }, session)
                 end
@@ -527,7 +471,7 @@ function RegisterNexusGuardServerEvents()
             NexusGuardServer.Discord.Send("general", 'Client Error Report', ("Player: %s (ID: %d)\nModule: %s\nError: %s"):format(playerName, source, tostring(detectionName), tostring(errorMessage)), NexusGuardServer.Config.Discord.webhooks and NexusGuardServer.Config.Discord.webhooks.general)
         end
         -- Store the error in the player's session metrics for potential analysis.
-        local session = PlayerSessionManager.GetSession(source)
+        local session = NexusGuardServer.GetSession(source) -- Get session via API
         if session and session.metrics then
             if not session.metrics.clientErrors then session.metrics.clientErrors = {} end
             table.insert(session.metrics.clientErrors, { detection = detectionName, error = errorMessage, time = os.time() })
@@ -558,8 +502,8 @@ function RegisterNexusGuardServerEvents()
         -- Example: NexusGuardServer.Utils.NotifyAdmins(source, "ScreenshotTaken", {url = screenshotUrl}) -- If NotifyAdmins exists in API
     end)
 
-    -- Position Update Handler (Client -> Server) (Guidelines 26, 27, 28, 31, 38)
-    -- Client sends periodic position updates for server-side validation (speed, teleport, noclip).
+    -- Position Update Handler (Client -> Server)
+    -- Client sends periodic position updates. Validation is now handled by the Detections module.
     EventRegistry:AddEventHandler('NEXUSGUARD_POSITION_UPDATE', function(currentPos, clientTimestamp, tokenData)
         local source = source -- Capture player source ID.
         if not source or source <= 0 then return end
@@ -572,10 +516,10 @@ function RegisterNexusGuardServerEvents()
             return
         end
 
-        -- Retrieve player session and validate data types.
-        local session = PlayerSessionManager.GetSession(source)
+        -- Retrieve player session via API.
+        local session = NexusGuardServer.GetSession(source)
         if not session or not session.metrics then
-            Log(("^1[NexusGuard] Player session or metrics not found for %s (ID: %d) during position update.^7"):format(playerName, source), 1)
+            Log(("^1[NexusGuard] API Player session or metrics not found for %s (ID: %d) during position update.^7"):format(playerName, source), 1)
             return
         end
         if type(currentPos) ~= "vector3" then
@@ -584,109 +528,47 @@ function RegisterNexusGuardServerEvents()
             return
         end
 
-        -- Guideline 38: Update Player State in Session Metrics based on server-side natives.
-        local ped = GetPlayerPed(source) -- Get the player's ped server-side.
-        if ped and ped ~= -1 then -- Check if ped is valid
-            session.metrics.isInVehicle = GetVehiclePedIsIn(ped, false) ~= 0
-            local velocity = GetEntityVelocity(ped)
-            session.metrics.isFalling = IsPedFalling(ped) -- More reliable server-side? Test needed.
-            session.metrics.isRagdoll = IsPedRagdoll(ped)
-            session.metrics.isSwimming = IsPedSwimming(ped)
-            session.metrics.verticalVelocity = velocity.z -- Store current vertical velocity.
-            session.metrics.isInParachute = IsPedInParachuteFreeFall(ped) -- Check parachute state.
+        -- Mark the session as active
+        if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
+            NexusGuardServer.Session.UpdateActivity(source)
+        end
+
+        -- Update player state in session metrics using the Session module
+        if NexusGuardServer.Session and NexusGuardServer.Session.UpdatePlayerState then
+            NexusGuardServer.Session.UpdatePlayerState(source)
         else
-            -- Reset states if ped is invalid (e.g., during loading screens)
-            session.metrics.isInVehicle = false
-            session.metrics.isFalling = false
-            session.metrics.isRagdoll = false
-            session.metrics.isSwimming = false
-            session.metrics.verticalVelocity = 0.0
-            session.metrics.isInParachute = false
-        end
-
-        -- Guideline 27: Skip checks during the initial spawn grace period.
-        if session.metrics.justSpawned then
-            -- Log(("^3[NexusGuard]^7 Skipping initial position checks for %s (ID: %d) (recently spawned).^7"):format(playerName, source), 3)
-            -- Still update the position to prevent large jump detection immediately after grace period ends.
-            session.metrics.lastServerPosition = currentPos
-            session.metrics.lastServerPositionTimestamp = GetGameTimer()
-            session.metrics.lastValidPosition = currentPos -- Assume spawn position is valid initially.
-            return
-        end
-
-        -- Load relevant thresholds from config via API table.
-        local serverSpeedThreshold = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.serverSideSpeedThreshold) or 50.0
-        local minTimeDiff = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.minTimeDiffPositionCheck) or 450 -- Minimum time between checks (ms).
-        local noclipTolerance = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.noclipTolerance) or 3.0 -- Extra distance tolerance for noclip check.
-
-        -- Perform checks only if enough time has passed since the last check (Guideline 28).
-        if session.metrics.lastServerPosition and session.metrics.lastServerPositionTimestamp then
-            local lastPos = session.metrics.lastServerPosition
-            local lastTimestamp = session.metrics.lastServerPositionTimestamp
-            local currentServerTimestamp = GetGameTimer()
-            local timeDiffMs = currentServerTimestamp - lastTimestamp
-
-            if timeDiffMs >= minTimeDiff then
-                local distance = #(currentPos - lastPos) -- Calculate distance moved.
-                local speed = 0.0
-                if timeDiffMs > 0 then speed = distance / (timeDiffMs / 1000.0) end -- Calculate speed in m/s.
-
-                -- Guideline 26 & 38: Adjust speed threshold based on player state.
-                local effectiveSpeedThreshold = serverSpeedThreshold
-                -- Increase threshold significantly if falling, ragdolling, or parachuting.
-                if session.metrics.isFalling or session.metrics.isRagdoll or session.metrics.isInParachute or session.metrics.verticalVelocity < -15.0 then -- Added check for high negative vertical velocity
-                    effectiveSpeedThreshold = serverSpeedThreshold * 2.5 -- Allow higher speed in these states.
-                    -- Log(("^3[NexusGuard]^7 Applying increased speed tolerance (%.1f m/s) due to falling/ragdoll/parachute state for %s^7"):format(effectiveSpeedThreshold, playerName), 3)
-                -- Slightly increase threshold if in a vehicle.
-                elseif session.metrics.isInVehicle then
-                     effectiveSpeedThreshold = serverSpeedThreshold * 1.3 -- Allow slightly higher speed in vehicles.
+            -- Fallback to legacy state update if Session module is not available
+            local ped = GetPlayerPed(source)
+            if ped and ped ~= -1 then
+                session.metrics.isInVehicle = GetVehiclePedIsIn(ped, false) ~= 0
+                local velocity = GetEntityVelocity(ped)
+                if velocity then
+                    session.metrics.verticalVelocity = velocity.z
                 end
-
-                -- Check if calculated speed exceeds the effective threshold.
-                if speed > effectiveSpeedThreshold then
-                    Log(("^1[NexusGuard Server Speed Check]^7 Suspicious speed for %s (ID: %d): %.2f m/s (%.1f km/h). Threshold: %.2f m/s. Dist: %.2fm in %dms. State: Fall=%s, Ragdoll=%s, Parachute=%s, Vehicle=%s, VVel=%.2f^7"):format(
-                        playerName, source, speed, speed * 3.6, effectiveSpeedThreshold, distance, timeDiffMs,
-                        tostring(session.metrics.isFalling), tostring(session.metrics.isRagdoll), tostring(session.metrics.isInParachute), tostring(session.metrics.isInVehicle), session.metrics.verticalVelocity or 0.0
-                    ), 1)
-                    -- Process this as a detection event.
-                    if NexusGuardServer.Detections.Process then
-                        NexusGuardServer.Detections.Process(source, "ServerSpeedCheck", {
-                            calculatedSpeed = speed, threshold = effectiveSpeedThreshold, distance = distance, timeDiff = timeDiffMs
-                        }, session)
-                    end
-                else
-                    -- Guideline 31: Basic Server-Side Noclip/Teleport Plausibility Check.
-                    -- If speed is okay, check if the movement distance is plausible compared to the last *valid* position.
-                    -- This is a rudimentary check and prone to false positives without raycasting.
-                    if session.metrics.lastValidPosition then
-                        local distFromLastValid = #(currentPos - session.metrics.lastValidPosition)
-                        -- Calculate max plausible distance based on allowed speed + tolerance.
-                        local maxPlausibleDistance = (effectiveSpeedThreshold * (timeDiffMs / 1000.0)) + (noclipTolerance * 2) -- Speed * time + extra buffer.
-                        if distFromLastValid > maxPlausibleDistance then
-                            -- Log potential issue but avoid flagging yet due to potential inaccuracy.
-                            -- Log(("^3[NexusGuard Server Noclip Check]^7 Potential large jump for %s (ID: %d). Dist from last valid: %.2fm > plausible %.2fm in %dms. Requires further validation (raycast). Current Speed: %.2f m/s.^7"):format(playerName, source, distFromLastValid, maxPlausibleDistance, timeDiffMs, speed), 2)
-                            -- if NexusGuardServer.Detections.Process then NexusGuardServer.Detections.Process(source, "ServerNoclipCheck", { distance = distFromLastValid, timeDiff = timeDiffMs }, session) end
-                        else
-                             -- If movement seems plausible relative to last valid position, update last valid position.
-                             session.metrics.lastValidPosition = currentPos
-                        end
-                    else
-                        -- Initialize last valid position if it doesn't exist.
-                        session.metrics.lastValidPosition = currentPos
-                    end
-                end
+                session.metrics.isFalling = IsPedFalling and IsPedFalling(ped) or false
+                session.metrics.isRagdoll = false -- Fallback without native
+                session.metrics.isSwimming = false -- Fallback without native
+                session.metrics.isInParachute = IsPedInParachuteFreeFall and IsPedInParachuteFreeFall(ped) or false
+            else
+                session.metrics.isInVehicle = false
+                session.metrics.isFalling = false
+                session.metrics.isRagdoll = false
+                session.metrics.isSwimming = false
+                session.metrics.verticalVelocity = 0.0
+                session.metrics.isInParachute = false
             end
-        else
-             -- Initialize last valid position on the very first update received.
-             session.metrics.lastValidPosition = currentPos
         end
-        -- Always update the last known position and timestamp for the next check.
-        session.metrics.lastServerPosition = currentPos
-        session.metrics.lastServerPositionTimestamp = GetGameTimer()
+
+        -- Call the validation function in the Detections module.
+        if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidatePositionUpdate then
+            NexusGuardServer.Detections.ValidatePositionUpdate(source, currentPos, clientTimestamp, session)
+        else
+            Log(("^1[NexusGuard] CRITICAL: Detections.ValidatePositionUpdate function not found in API! Cannot validate position for %s (ID: %d)^7"):format(playerName, source), 1)
+        end
     end)
 
-    -- Health Update Handler (Client -> Server) (Guidelines 25, 29)
-    -- Client sends periodic health/armor updates for server-side validation (god mode, armor limits).
+    -- Health Update Handler (Client -> Server)
+    -- Client sends periodic health/armor updates. Validation is now handled by the Detections module.
     EventRegistry:AddEventHandler('NEXUSGUARD_HEALTH_UPDATE', function(currentHealth, currentArmor, clientTimestamp, tokenData)
         local source = source -- Capture player source ID.
         if not source or source <= 0 then return end
@@ -699,62 +581,27 @@ function RegisterNexusGuardServerEvents()
             return
         end
 
-        -- Retrieve player session.
-        local session = PlayerSessionManager.GetSession(source)
+        -- Retrieve player session via API.
+        local session = NexusGuardServer.GetSession(source)
         if not session or not session.metrics then
-            Log(("^1[NexusGuard] Player session or metrics not found for %s (ID: %d) during health update.^7"):format(playerName, source), 1)
+            Log(("^1[NexusGuard] API Player session or metrics not found for %s (ID: %d) during health update.^7"):format(playerName, source), 1)
             return
         end
 
-        -- Load relevant thresholds from config.
-        local serverHealthRegenThreshold = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.serverSideRegenThreshold) or 3.0 -- Max HP regen per second.
-        local serverArmorMax = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.serverSideArmorThreshold) or 105.0 -- Max allowed armor value (slight tolerance).
-
-        -- Guideline 29: Check for suspicious health regeneration.
-        if session.metrics.lastServerHealth and session.metrics.lastServerHealthTimestamp then
-            local lastHealth = session.metrics.lastServerHealth
-            local lastTimestamp = session.metrics.lastServerHealthTimestamp
-            local currentServerTimestamp = GetGameTimer()
-            local timeDiffMs = currentServerTimestamp - lastTimestamp
-
-            -- Check only if health increased and enough time has passed (> 500ms) to avoid noise.
-            if currentHealth > lastHealth and timeDiffMs > 500 then
-                local healthIncrease = currentHealth - lastHealth
-                local regenRate = 0.0
-                if timeDiffMs > 0 then regenRate = healthIncrease / (timeDiffMs / 1000.0) end -- Regen rate in HP/sec.
-
-                -- Flag if regen rate exceeds threshold AND the total increase is significant (e.g., > 5 HP).
-                -- TODO: Correlate with recent damage events (Guideline 25 - More complex).
-                if regenRate > serverHealthRegenThreshold and healthIncrease > 5.0 then
-                     Log(("^1[NexusGuard Server Health Check]^7 Suspicious health regeneration for %s (ID: %d): +%.1f HP in %dms (Rate: %.2f HP/s). Threshold: %.2f HP/s.^7"):format(playerName, source, healthIncrease, timeDiffMs, regenRate, serverHealthRegenThreshold), 1)
-                     -- Process as a detection event.
-                     if NexusGuardServer.Detections.Process then
-                         NexusGuardServer.Detections.Process(source, "ServerHealthRegenCheck", {
-                             increase = healthIncrease, rate = regenRate, threshold = serverHealthRegenThreshold, timeDiff = timeDiffMs
-                         }, session)
-                     end
-                end
-            end
+        -- Mark the session as active
+        if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
+            NexusGuardServer.Session.UpdateActivity(source)
         end
 
-        -- Guideline 25: Check if current armor exceeds the configured maximum threshold.
-        if currentArmor > serverArmorMax then
-             Log(("^1[NexusGuard Server Armor Check]^7 Suspicious armor level for %s (ID: %d): %.1f (Max Allowed: %.1f).^7"):format(playerName, source, currentArmor, serverArmorMax), 1)
-             -- Process as a detection event.
-             if NexusGuardServer.Detections.Process then
-                 NexusGuardServer.Detections.Process(source, "ServerArmorCheck", {
-                     armor = currentArmor, threshold = serverArmorMax
-                 }, session)
-             end
+        -- Call the validation function in the Detections module.
+        if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidateHealthUpdate then
+            NexusGuardServer.Detections.ValidateHealthUpdate(source, currentHealth, currentArmor, clientTimestamp, session)
+        else
+             Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Cannot validate health/armor for %s (ID: %d)^7"):format(playerName, source), 1)
         end
-
-        -- Update the last known health, armor, and timestamp in the session metrics.
-        session.metrics.lastServerHealth = currentHealth
-        session.metrics.lastServerArmor = currentArmor
-        session.metrics.lastServerHealthTimestamp = GetGameTimer()
     end)
 
-    -- Weapon Clip Size Check Handler (Client -> Server) (Guideline 24)
+    -- Weapon Clip Size Check Handler (Client -> Server)
     -- Client reports current weapon hash and clip count, server validates against config.
     -- Assumes 'NEXUSGUARD_WEAPON_CHECK' is registered in EventRegistry.
     EventRegistry:AddEventHandler('NEXUSGUARD_WEAPON_CHECK', function(weaponHash, clipCount, tokenData)
@@ -769,11 +616,16 @@ function RegisterNexusGuardServerEvents()
             return
         end
 
-        -- Retrieve player session.
-        local session = PlayerSessionManager.GetSession(source)
+        -- Retrieve player session via API.
+        local session = NexusGuardServer.GetSession(source)
         if not session or not session.metrics then
-            Log(("^1[NexusGuard] Player session or metrics not found for %s (ID: %d) during weapon check.^7"):format(playerName, source), 1)
+            Log(("^1[NexusGuard] API Player session or metrics not found for %s (ID: %d) during weapon check.^7"):format(playerName, source), 1)
             return
+        end
+
+        -- Mark the session as active
+        if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
+            NexusGuardServer.Session.UpdateActivity(source)
         end
 
         -- Get the configured base clip size for this weapon hash from config.
@@ -820,15 +672,20 @@ function SetupScheduledTasks()
             Citizen.Wait(cleanupInterval)
 
             -- Call cleanup functions from relevant modules via API.
-            -- Example: Cleanup old detection history from database.
+            -- Cleanup old detection history from database.
             if NexusGuardServer.Database and NexusGuardServer.Database.CleanupDetectionHistory then
                 NexusGuardServer.Database.CleanupDetectionHistory()
             end
-            -- Example: Cleanup expired security tokens from cache.
+
+            -- Cleanup expired security tokens from cache.
             if NexusGuardServer.Security and NexusGuardServer.Security.CleanupTokenCache then
                 NexusGuardServer.Security.CleanupTokenCache()
             end
-            -- Add other cleanup tasks here (e.g., old session data if not handled on drop).
+
+            -- Perform periodic session cleanup (stale sessions)
+            if NexusGuardServer.Session and NexusGuardServer.Session.PeriodicCleanup then
+                NexusGuardServer.Session.PeriodicCleanup()
+            end
         end
     end)
     Log("^2[NexusGuard] Scheduled cleanup tasks initialized.^7", 2)

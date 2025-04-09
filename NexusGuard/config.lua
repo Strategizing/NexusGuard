@@ -29,6 +29,12 @@ Config.AdminGroups = {"admin", "superadmin", "mod"} -- Groups considered admin b
 -- Example of a strong secret (DO NOT USE THIS EXAMPLE): "p$z^8@!L#s&G*f@D9j!K3m$n&P@r*T(w"
 Config.SecuritySecret = "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" -- CRITICAL: Must be changed
 
+-- Security Token Settings
+Config.Security = {
+    TokenValidityWindow = 60, -- Seconds a token is considered valid after generation (Default: 60)
+    TokenCacheCleanupIntervalMs = 60000 -- Milliseconds between cleaning up expired tokens from the anti-replay cache (Default: 60000 = 1 minute)
+}
+
 -- Auto Configuration (Placeholder Features)
 Config.AutoConfig = {
     enabled = true, -- Enable auto-configuration during installation
