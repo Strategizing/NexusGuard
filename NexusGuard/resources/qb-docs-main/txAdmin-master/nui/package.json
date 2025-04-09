@@ -1,0 +1,37 @@
+{
+    "name": "txadmin-nui",
+    "version": "1.0.0",
+    "description": "The NUI package contains all the in-game interface (menu and warn page) of txAdmin.",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "test": "echo \"No tests for this workspace. Skipping...\"",
+        "build": "vite build --mode production",
+        "dev": "vite build --watch --mode development",
+        "browser": "vite dev --port 40121 --strictPort --mode devNuiBrowser",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "license:report": "npx license-report > ../.reports/license/nui.html"
+    },
+    "keywords": [],
+    "author": "André Tabarra",
+    "license": "MIT",
+    "dependencies": {
+        "@emotion/react": "^11.13.3",
+        "@emotion/styled": "^11.13.0",
+        "@mui/icons-material": "^6.1.2",
+        "@mui/material": "6.1.2",
+        "notistack": "^3.0.1",
+        "react-polyglot": "^0.7.2",
+        "recoil": "^0.7.7"
+    },
+    "devDependencies": {
+        "@types/node-polyglot": "^2.5.0",
+        "@types/react": "^18.3.11",
+        "@types/react-dom": "^18.3.0",
+        "@vitejs/plugin-react-swc": "^3.7.1",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "vite": "^5.4.8",
+        "vite-tsconfig-paths": "^5.0.1"
+    }
+}
