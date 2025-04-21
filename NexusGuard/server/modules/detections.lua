@@ -42,6 +42,15 @@ local Detections = {
         CERTAIN = 1.0   -- Certain (100%)
     },
 
+    -- Detection confidence descriptions
+    confidenceDescriptions = {
+        [0] = "None",       -- No confidence (0%)
+        [0.2] = "Very Low", -- Very low confidence (20%)
+        [0.4] = "Low",      -- Low confidence (40%)
+        [0.6] = "Medium",   -- Medium confidence (60%)
+        [0.8] = "High",     -- High confidence (80%)
+        [1.0] = "Certain"   -- Certain (100%)
+    },
     -- Detection severity levels
     severityLevels = {
         INFO = "Info",         -- Informational, no action needed
@@ -70,12 +79,23 @@ local Detections = {
     }
 }
 
+-- Load required modules
+local Natives = require('shared/natives')                 -- Load the natives wrapper
+local Dependencies = require('shared/dependency_manager') -- Load the dependency manager
+local ModuleLoader = require('shared/module_loader')      -- Load the module loader
 -- Attempt to get the NexusGuard Server API from globals.lua. Use pcall for safety.
-local successAPI, NexusGuardServer = pcall(function() return exports['NexusGuard']:GetNexusGuardServerAPI() end)
+local successAPI, NexusGuardServer = pcall(function()
+    if _G.NexusGuardServer then
+        return _G.NexusGuardServer
+    elseif _G.exports and _G.exports['NexusGuard'] and _G.exports['NexusGuard'].GetNexusGuardServerAPI then
+        return _G.exports['NexusGuard']:GetNexusGuardServerAPI()
+    end
+    return nil
+end)
 if not successAPI or not NexusGuardServer then
     print("^1[NexusGuard Detections] CRITICAL: Failed to get NexusGuardServer API. Detections module will not function.^7")
     -- Create dummy API to prevent immediate errors, although functionality will be broken.
-    NexusGuardServer = NexusGuardServer or {
+    NexusGuardServer = {
         Config = { Thresholds = {}, Severity = {}, Actions = {} },
         Utils = { Log = function(...) print("[NexusGuard Detections Fallback Log]", ...) end },
         Bans = {}, Discord = {}
@@ -83,13 +103,16 @@ if not successAPI or not NexusGuardServer then
 end
 
 -- Local alias for the logging function.
-local Log = NexusGuardServer.Utils.Log
-
--- Attempt to load ox_lib for JSON encoding/decoding
-local hasOxLib = pcall(function() return lib ~= nil and lib.json ~= nil end)
-if not hasOxLib then
-    Log("^3[NexusGuard Detections] WARNING: ox_lib JSON functions not available. Some features may be limited.^7", 2)
+local Log = function(...)
+    if NexusGuardServer and NexusGuardServer.Utils and type(NexusGuardServer.Utils.Log) == "function" then
+        NexusGuardServer.Utils.Log(...)
+    else
+        print("[NexusGuard Detections Fallback Log]", ...)
+    end
 end
+
+-- Initialize the dependency manager
+Dependencies.Initialize(Log)
 
 --[[
     Validates the basic structure of incoming detection data.
@@ -126,7 +149,7 @@ end
     @param severity (string): The determined severity ("Low", "Medium", "High", "Critical", "Info").
 ]]
 local function ApplyPenalty(playerId, session, detectionType, validatedData, severity)
-    local playerName = GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
+    local playerName = Natives.GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
     local reason = validatedData.reason or "No specific reason provided."
     local details = validatedData.details or {}
     -- Determine trust score impact based on severity config, with defaults.
@@ -135,9 +158,11 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
 
     -- Ensure JSON encoding is safe for logging details.
     local detailsJson = "error encoding"
-    if lib and lib.json then
-        local encSuccess, encResult = pcall(lib.json.encode, details)
-        if encSuccess then detailsJson = encResult end
+    local encSuccess, encResult = pcall(function()
+        return Dependencies.JSON.encode(details)
+    end)
+    if encSuccess and encResult then
+        detailsJson = encResult
     end
 
     -- Log the confirmed detection event.
@@ -206,7 +231,7 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
             NexusGuardServer.Bans.Execute(playerId, banReason, "NexusGuard System") -- Default to permanent ban.
         else
              Log("^1Detections Action Error: Bans.Execute function missing from API. Cannot ban player. Kicking as fallback.^7", 1)
-             DropPlayer(playerId, "Kicked by Anti-Cheat (System Error: Ban Function Missing)")
+            Natives.DropPlayer(playerId, "Kicked by Anti-Cheat (System Error: Ban Function Missing)")
         end
     -- Check Kick Threshold (only if not banned)
     elseif currentTrust <= actionConfig.kickThreshold then
@@ -214,7 +239,7 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
             currentTrust, actionConfig.kickThreshold, detectionType, playerName, playerId
         ), 1)
         local kickReason = ("Kicked by Anti-Cheat: Triggered %s (Trust Score: %.1f)"):format(detectionType, currentTrust)
-        DropPlayer(playerId, kickReason)
+        Natives.DropPlayer(playerId, kickReason)
     end
 end
 
@@ -233,7 +258,7 @@ function Detections.Process(playerId, detectionType, detectionData, session)
     -- Ensure essential components are loaded.
     if not NexusGuardServer or not Log then print("^1[NexusGuard Detections] CRITICAL: NexusGuardServer API or Log function not available. Cannot process detection.^7"); return false end
 
-    local playerName = GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
+    local playerName = Natives.GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
     Log(("^3Detections: Processing report for player %s (ID: %d), Type: %s^7"):format(playerName, playerId, detectionType), 3)
 
     -- 1. Validate Input Data Structure: Ensure detectionData is a table with expected base fields.
@@ -268,25 +293,137 @@ function Detections.Process(playerId, detectionType, detectionData, session)
             local baseThreshold = Thresholds.serverSideSpeedThreshold or 50.0 -- Base speed limit (m/s).
             local effectiveThreshold = baseThreshold
             local reasonSuffix = ""
+            local confidenceLevel = Detections.confidenceLevels.HIGH -- Default confidence
 
-            -- Adjust threshold based on player state stored in session metrics (Guideline 26, 38).
-            if session.metrics.isFalling or session.metrics.isRagdoll or session.metrics.isInParachute or (session.metrics.verticalVelocity and session.metrics.verticalVelocity < -10.0) then
-                effectiveThreshold = baseThreshold * 2.5 -- Allow significantly higher speed if falling/ragdolling/parachuting.
+            -- Enhanced context-aware validation (Guideline 26, 38)
+            -- Check for recent teleport or spawn events
+            if session.metrics.justTeleported or session.metrics.justSpawned then
+                -- Skip validation during teleport/spawn grace periods
+                isValid = false
+                validatedData.reason = "Speed check skipped during teleport/spawn grace period"
+                severity = "Info"
+                validatedData.serverValidated = false
+                return false
+            end
+
+            -- Adjust threshold based on player state with more granular context awareness
+            if session.metrics.isFalling or session.metrics.isRagdoll or session.metrics.isInParachute then
+                -- Falling/ragdoll/parachute states can legitimately cause high speeds
+                effectiveThreshold = baseThreshold * 2.5
                 reasonSuffix = " (Adjusted for falling/ragdoll/parachute)"
+                confidenceLevel = Detections.confidenceLevels
+                    .MEDIUM -- Lower confidence due to potential false positives
+            elseif session.metrics.verticalVelocity and session.metrics.verticalVelocity < -10.0 then
+                -- Significant downward velocity (falling without the flag set)
+                effectiveThreshold = baseThreshold * 2.0
+                reasonSuffix = " (Adjusted for vertical velocity)"
+                confidenceLevel = Detections.confidenceLevels.MEDIUM
             elseif session.metrics.isInVehicle then
-                effectiveThreshold = baseThreshold * 1.3 -- Allow slightly higher speed in vehicles.
-                reasonSuffix = " (Adjusted for vehicle)"
+                -- Vehicle type-based threshold adjustment
+                local vehicleClass = -1
+                local vehicleEntity = session.metrics.currentVehicle
+
+                if vehicleEntity and Natives.DoesEntityExist(vehicleEntity) then
+                    vehicleClass = Natives.GetVehicleClass(vehicleEntity)
+                end
+
+                -- Adjust threshold based on vehicle class
+                if vehicleClass == 16 then -- Planes
+                    effectiveThreshold = baseThreshold * 3.0
+                    reasonSuffix = " (Adjusted for aircraft)"
+                elseif vehicleClass == 15 then -- Helicopters
+                    effectiveThreshold = baseThreshold * 2.0
+                    reasonSuffix = " (Adjusted for helicopter)"
+                elseif vehicleClass == 14 then -- Boats
+                    effectiveThreshold = baseThreshold * 1.5
+                    reasonSuffix = " (Adjusted for boat)"
+                elseif vehicleClass == 8 then -- Motorcycles
+                    effectiveThreshold = baseThreshold * 1.4
+                    reasonSuffix = " (Adjusted for motorcycle)"
+                else -- Other vehicles
+                    effectiveThreshold = baseThreshold * 1.3
+                    reasonSuffix = " (Adjusted for vehicle)"
+                end
+            end
+
+            -- Check for recent damage events that might cause speed spikes
+            if session.metrics.recentDamage and (os.time() - session.metrics.recentDamage.timestamp) < 3 then
+                effectiveThreshold = effectiveThreshold * 1.2 -- Allow higher speed after taking damage
+                reasonSuffix = reasonSuffix .. " (Adjusted for recent damage)"
+                confidenceLevel = Detections.confidenceLevels.MEDIUM
             end
 
             -- Check if calculated speed exceeds the adjusted threshold.
             if speed > effectiveThreshold then
+                -- Additional validation: Check for consistent speed violations
+                local consistentViolation = false
+
+                -- If we have previous speed samples, check for a pattern of violations
+                if session.metrics.speedSamples and #session.metrics.speedSamples >= 2 then
+                    local violationCount = 0
+                    for _, sample in ipairs(session.metrics.speedSamples) do
+                        if sample.speed > sample.threshold then
+                            violationCount = violationCount + 1
+                        end
+                    end
+
+                    -- If more than 50% of recent samples violated thresholds, consider it consistent
+                    consistentViolation = (violationCount / #session.metrics.speedSamples) > 0.5
+
+                    if consistentViolation then
+                        confidenceLevel = Detections.confidenceLevels.CERTAIN
+                    else
+                        confidenceLevel = Detections.confidenceLevels.MEDIUM
+                    end
+                end
+
+                -- Store the current speed sample for future pattern analysis
+                if not session.metrics.speedSamples then
+                    session.metrics.speedSamples = {}
+                end
+
+                -- Keep only the last 5 samples
+                if #session.metrics.speedSamples >= 5 then
+                    table.remove(session.metrics.speedSamples, 1)
+                end
+
+                table.insert(session.metrics.speedSamples, {
+                    speed = speed,
+                    threshold = effectiveThreshold,
+                    timestamp = os.time(),
+                    violation = speed > effectiveThreshold
+                })
+
+                -- Determine severity based on how much the threshold was exceeded and confidence level
+                local thresholdExceedFactor = speed / effectiveThreshold
+
+                if thresholdExceedFactor > 2.0 and confidenceLevel >= Detections.confidenceLevels.HIGH then
+                    severity = "Critical" -- Extreme speed, high confidence
+                elseif thresholdExceedFactor > 1.5 or consistentViolation then
+                    severity = "High"     -- Significant speed or consistent violations
+                elseif thresholdExceedFactor > 1.2 then
+                    severity = "Medium"   -- Moderate speed violation
+                else
+                    severity = "Low"      -- Minor speed violation
+                end
                 isValid = true
-                severity = "High" -- Speeding is usually high severity.
-                validatedData.reason = string.format("Calculated speed %.2f m/s exceeded threshold %.2f m/s%s", speed, effectiveThreshold, reasonSuffix)
+                validatedData.reason = string.format(
+                    "Calculated speed %.2f m/s exceeded threshold %.2f m/s%s (%.1fx, Confidence: %.1f)",
+                    speed, effectiveThreshold, reasonSuffix, thresholdExceedFactor, confidenceLevel)
                 -- Store relevant details for logging/review.
                 validatedData.details.speed = speed
                 validatedData.details.threshold = effectiveThreshold
-                validatedData.details.state = { falling=session.metrics.isFalling, ragdoll=session.metrics.isRagdoll, parachute=session.metrics.isInParachute, inVehicle=session.metrics.isInVehicle, vertVel=session.metrics.verticalVelocity }
+                validatedData.details.exceedFactor = thresholdExceedFactor
+                validatedData.details.confidence = confidenceLevel
+                validatedData.details.consistent = consistentViolation
+                validatedData.details.state = {
+                    falling = session.metrics.isFalling,
+                    ragdoll = session.metrics.isRagdoll,
+                    parachute = session.metrics.isInParachute,
+                    inVehicle = session.metrics.isInVehicle,
+                    vertVel = session.metrics.verticalVelocity,
+                    vehicleClass = vehicleClass or -1
+                }
             end
         else
             -- If speed value is missing or invalid.
@@ -301,24 +438,142 @@ function Detections.Process(playerId, detectionType, detectionData, session)
         local increase = tonumber(validatedData.increase)
         local rate = tonumber(validatedData.rate)
         local regenThreshold = Thresholds.serverSideRegenThreshold or 3.0 -- Max allowed HP/sec regen.
+        local confidenceLevel = Detections.confidenceLevels.MEDIUM        -- Default confidence
 
-        -- Validate based on the server-side regen check logic (Guideline 29).
-        -- Requires significant increase AND rate exceeding threshold.
-        if rate and increase and rate > regenThreshold and increase > 5.0 then
-             isValid = true
-             severity = "Medium" -- Suspicious regen is medium severity.
-             validatedData.reason = string.format("Health regeneration rate %.2f HP/s (increase %.1f HP) exceeded threshold %.2f HP/s", rate, increase, regenThreshold)
-             validatedData.details.rate = rate
-             validatedData.details.increase = increase
-             validatedData.details.threshold = regenThreshold
-             validatedData.details.timeDiff = validatedData.timeDiff
-        else
-            -- TODO: Add server-side validation logic for "GodMode" reports from client.
-            -- This might involve checking recent damage events vs health changes stored in session.metrics.healthHistory.
-            -- For now, if it's just "GodMode" without regen data, we don't have server validation.
-            -- validatedData.reason = "GodMode validation requires health history analysis (Not Implemented)."
+        -- Skip validation during spawn grace period
+        if session.metrics.justSpawned then
+            isValid = false
+            validatedData.reason = "Health check skipped during spawn grace period"
+            severity = "Info"
+            validatedData.serverValidated = false
+            return false
         end
-         validatedData.serverValidated = isValid
+
+        -- Check for recent healing events that might explain health increase
+        local hasRecentHealing = false
+        if session.metrics.healingEvents then
+            for _, event in ipairs(session.metrics.healingEvents) do
+                -- Check if there was a healing event in the last 5 seconds
+                if (os.time() - event.timestamp) < 5 then
+                    hasRecentHealing = true
+                    break
+                end
+            end
+        end
+
+        -- Enhanced validation for health regeneration
+        if rate and increase then
+            -- Adjust threshold based on context
+            local adjustedThreshold = regenThreshold
+            local reasonSuffix = ""
+
+            -- Adjust threshold for recent healing events
+            if hasRecentHealing then
+                adjustedThreshold = regenThreshold * 2.0 -- Allow higher regen rate after healing
+                reasonSuffix = " (Adjusted for recent healing)"
+                confidenceLevel = Detections.confidenceLevels.LOW
+            end
+
+            -- Check for armor changes that might be misinterpreted as health regen
+            if session.metrics.lastServerArmor and session.metrics.lastServerArmor < (session.metrics.currentArmor or 0) then
+                adjustedThreshold = regenThreshold * 1.5 -- Allow higher apparent regen when armor is changing
+                reasonSuffix = reasonSuffix .. " (Adjusted for armor change)"
+                confidenceLevel = Detections.confidenceLevels.LOW
+            end
+
+            -- Check for consistent health regeneration pattern
+            local consistentRegen = false
+            if session.metrics.healthHistory and #session.metrics.healthHistory >= 3 then
+                local regenCount = 0
+                for i = 2, #session.metrics.healthHistory do
+                    local prev = session.metrics.healthHistory[i - 1]
+                    local curr = session.metrics.healthHistory[i]
+                    if prev and curr and curr.health > prev.health and not curr.damaged then
+                        regenCount = regenCount + 1
+                    end
+                end
+
+                -- If more than 50% of recent health changes were regeneration without damage, consider it suspicious
+                consistentRegen = (regenCount / (#session.metrics.healthHistory - 1)) > 0.5
+
+                if consistentRegen then
+                    confidenceLevel = Detections.confidenceLevels.HIGH
+                end
+            end
+
+            -- Validate based on the server-side regen check logic with context awareness
+            if rate > adjustedThreshold and increase > 5.0 then
+                isValid = true
+
+                -- Determine severity based on how much the threshold was exceeded and confidence level
+                local thresholdExceedFactor = rate / adjustedThreshold
+
+                if thresholdExceedFactor > 3.0 and confidenceLevel >= Detections.confidenceLevels.HIGH then
+                    severity = "Critical" -- Extreme regeneration, high confidence
+                elseif thresholdExceedFactor > 2.0 or consistentRegen then
+                    severity = "High"     -- Significant regeneration or consistent pattern
+                elseif thresholdExceedFactor > 1.5 then
+                    severity = "Medium"   -- Moderate regeneration
+                else
+                    severity = "Low"      -- Minor regeneration
+                end
+
+                validatedData.reason = string.format(
+                    "Health regeneration rate %.2f HP/s (increase %.1f HP) exceeded threshold %.2f HP/s%s (%.1fx, Confidence: %.1f)",
+                    rate, increase, adjustedThreshold, reasonSuffix, thresholdExceedFactor, confidenceLevel)
+
+                validatedData.details.rate = rate
+                validatedData.details.increase = increase
+                validatedData.details.threshold = adjustedThreshold
+                validatedData.details.baseThreshold = regenThreshold
+                validatedData.details.exceedFactor = thresholdExceedFactor
+                validatedData.details.confidence = confidenceLevel
+                validatedData.details.consistent = consistentRegen
+                validatedData.details.hasRecentHealing = hasRecentHealing
+                validatedData.details.timeDiff = validatedData.timeDiff
+            end
+        elseif detectionType == "GodMode" then
+            -- Enhanced server-side validation for client-reported GodMode
+            -- Check for suspicious patterns in health history
+            if session.metrics.healthHistory and #session.metrics.healthHistory >= 5 then
+                local suspiciousPatterns = 0
+                local totalDamageEvents = 0
+
+                -- Analyze health history for suspicious patterns
+                for i = 2, #session.metrics.healthHistory do
+                    local prev = session.metrics.healthHistory[i - 1]
+                    local curr = session.metrics.healthHistory[i]
+
+                    -- Count damage events where health didn't decrease
+                    if prev and curr and curr.damaged and curr.health >= prev.health then
+                        suspiciousPatterns = suspiciousPatterns + 1
+                    end
+
+                    -- Count total damage events
+                    if curr and curr.damaged then
+                        totalDamageEvents = totalDamageEvents + 1
+                    end
+                end
+
+                -- If player took damage but health didn't decrease in most cases, likely godmode
+                if totalDamageEvents >= 3 and (suspiciousPatterns / totalDamageEvents) > 0.7 then
+                    isValid = true
+                    severity = "High"
+                    confidenceLevel = Detections.confidenceLevels.HIGH
+
+                    validatedData.reason = string.format(
+                        "Detected %d/%d (%.1f%%) instances where health didn't decrease after damage",
+                        suspiciousPatterns, totalDamageEvents, (suspiciousPatterns / totalDamageEvents) * 100)
+
+                    validatedData.details.suspiciousPatterns = suspiciousPatterns
+                    validatedData.details.totalDamageEvents = totalDamageEvents
+                    validatedData.details.suspiciousRatio = suspiciousPatterns / totalDamageEvents
+                    validatedData.details.confidence = confidenceLevel
+                end
+            end
+        end
+
+        validatedData.serverValidated = isValid
 
     -- Server-Side Armor Check Validation
     elseif detectionType == "ServerArmorCheck" then
@@ -361,24 +616,28 @@ function Detections.Process(playerId, detectionType, detectionData, session)
             -- - Movement distance is not excessively large (to avoid checks on likely admin TPs/respawns).
             local maxSensibleDistance = (Thresholds.serverSideSpeedThreshold or 50.0) * 5.0 -- Heuristic: 5 seconds at max speed threshold
             if moveDistance > noclipTolerance and moveDistance < maxSensibleDistance then
-                local sourcePed = GetPlayerPed(playerId)
-                if sourcePed and sourcePed ~= -1 then
+                local sourcePed = Natives.GetPlayerPed(playerId)
+                if Natives.DoesEntityExist(sourcePed) then
                     local ignoreEntity = sourcePed -- Ignore the player's own ped in the raycast.
                     local flags = 7 -- Intersect world geometry, objects, vehicles. Adjust as needed.
                     local zOffset = 0.5 -- Raycast slightly above ground level.
 
-                    local rayStart = vector3(lastValidPos.x, lastValidPos.y, lastValidPos.z + zOffset)
-                    local rayEnd = vector3(currentPos.x, currentPos.y, currentPos.z + zOffset)
+                    local rayStart = Natives.vector3(lastValidPos.x, lastValidPos.y, lastValidPos.z + zOffset)
+                    local rayEnd = Natives.vector3(currentPos.x, currentPos.y, currentPos.z + zOffset)
 
                     -- WARNING: Synchronous raycasting with GetShapeTestResult immediately after StartShapeTestRay
                     -- is generally unreliable in FiveM due to its asynchronous nature.
                     -- A robust implementation requires handling the async result, potentially over multiple ticks.
                     -- This example uses a small wait, which is NOT a reliable solution.
-                    local rayHandle = StartShapeTestRay(rayStart.x, rayStart.y, rayStart.z, rayEnd.x, rayEnd.y, rayEnd.z, flags, ignoreEntity, 7)
-                    Citizen.Wait(50) -- !! Unreliable wait !! A proper async handler is needed.
-                    local didHit, hitPosition, hitNormal, hitEntity = GetShapeTestResult(rayHandle)
+                    local rayHandle = Natives.StartShapeTestRay(rayStart.x, rayStart.y, rayStart.z, rayEnd.x, rayEnd.y,
+                        rayEnd.z, flags, ignoreEntity, 7)
+                    -- !! WARNING: Synchronous raycasting after a small wait is unreliable in FiveM. !!
+                    -- !! A robust implementation requires handling async results properly. !!
+                    -- !! Consider disabling this check or implementing a proper async handler if issues arise. !!
+                    Citizen.Wait(50) -- !! Unreliable wait !!
+                    local _, didHit, hitPosition, _, hitEntity = Natives.GetShapeTestResult(rayHandle)
 
-                    if didHit then
+                    if didHit and hitPosition then
                         -- Calculate distance from start to the hit point and total ray distance.
                         local distToHit = #(vector3(hitPosition.x, hitPosition.y, hitPosition.z) - rayStart)
                         local targetDist = #(rayEnd - rayStart)
@@ -387,13 +646,20 @@ function Detections.Process(playerId, detectionType, detectionData, session)
                         if distToHit < (targetDist - noclipTolerance) then
                             isValid = true
                             severity = "High" -- Noclip/Teleport through objects is high severity.
-                            validatedData.reason = string.format("Raycast detected potential noclip/teleport. Hit obstacle (Entity: %s) at [%.1f, %.1f, %.1f] while moving from [%.1f, %.1f, %.1f] to [%.1f, %.1f, %.1f].", tostring(hitEntity), hitPosition.x, hitPosition.y, hitPosition.z, lastValidPos.x, lastValidPos.y, lastValidPos.z, currentPos.x, currentPos.y, currentPos.z)
+                            validatedData.reason = string.format(
+                                "Raycast detected potential noclip/teleport. Hit obstacle (Entity: %s) at [%.1f, %.1f, %.1f] while moving from [%.1f, %.1f, %.1f] to [%.1f, %.1f, %.1f].",
+                                tostring(hitEntity or 'unknown'),
+                                hitPosition.x, hitPosition.y, hitPosition.z,
+                                lastValidPos.x, lastValidPos.y, lastValidPos.z,
+                                currentPos.x, currentPos.y, currentPos.z)
                             validatedData.details.raycastHit = true
                             validatedData.details.hitPos = hitPosition
                             validatedData.details.startPos = lastValidPos
                             validatedData.details.endPos = currentPos
                             validatedData.details.hitEntity = hitEntity
-                            Log(("^1[NexusGuard Raycast] Noclip/Teleport detected for %s (ID: %d). Ray hit entity %s.^7"):format(playerName, playerId, tostring(hitEntity)), 1)
+                            Log(
+                                ("^1[NexusGuard Raycast] Noclip/Teleport detected for %s (ID: %d). Ray hit entity %s.^7")
+                                :format(playerName, playerId, tostring(hitEntity or 'unknown')), 1)
                         -- else -- Hit occurred close to destination, likely valid.
                         --    Log(("^3[NexusGuard Raycast] Raycast hit near destination for %s. Likely valid.^7"):format(playerName), 3)
                         end
@@ -495,7 +761,7 @@ end
     @param session (table): The player's session data object.
 ]]
 function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp, session)
-    local playerName = GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
+    local playerName = Natives.GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
 
     -- Ensure session and metrics are available.
     if not session or not session.metrics then
@@ -509,22 +775,22 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
 
     -- Update player state if not already done in server_main
     if not session.metrics.stateUpdated then
-        local ped = GetPlayerPed(playerId)
-        if ped and ped ~= -1 then
+        local ped = Natives.GetPlayerPed(playerId)
+        if Natives.DoesEntityExist(ped) then
             -- Update vehicle state
-            session.metrics.isInVehicle = GetVehiclePedIsIn(ped, false) ~= 0
+            session.metrics.isInVehicle = Natives.GetVehiclePedIsIn(ped, false) ~= 0
 
             -- Update movement state
-            local velocity = GetEntityVelocity(ped)
-            session.metrics.isFalling = IsPedFalling(ped)
-            session.metrics.isRagdoll = IsPedRagdoll(ped)
-            session.metrics.isSwimming = IsPedSwimming(ped)
+            local velocity = Natives.GetEntityVelocity(ped)
+            session.metrics.isFalling = Natives.IsPedFalling(ped)
+            session.metrics.isRagdoll = Natives.IsPedRagdoll(ped)
+            session.metrics.isSwimming = Natives.IsPedSwimming(ped)
             session.metrics.verticalVelocity = velocity.z
-            session.metrics.isInParachute = IsPedInParachuteFreeFall(ped)
-            session.metrics.isGettingUp = IsPedGettingUp(ped)
-            session.metrics.isClimbing = IsPedClimbing(ped)
-            session.metrics.isVaulting = IsPedVaulting(ped)
-            session.metrics.isJumping = IsPedJumping(ped)
+            session.metrics.isInParachute = Natives.IsPedInParachuteFreeFall(ped)
+            session.metrics.isGettingUp = Natives.IsPedGettingUp(ped)
+            session.metrics.isClimbing = Natives.IsPedClimbing(ped)
+            session.metrics.isVaulting = Natives.IsPedVaulting(ped)
+            session.metrics.isJumping = Natives.IsPedJumping(ped)
 
             -- Mark state as updated
             session.metrics.stateUpdated = true
@@ -535,7 +801,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
     if session.metrics.justSpawned then
         -- Still update the position to prevent large jump detection immediately after grace period ends.
         session.metrics.lastServerPosition = currentPos
-        session.metrics.lastServerPositionTimestamp = GetGameTimer()
+        session.metrics.lastServerPositionTimestamp = Natives.GetGameTimer()
         session.metrics.lastValidPosition = currentPos -- Assume spawn position is valid initially.
         return -- Skip validation during grace period.
     end
@@ -544,7 +810,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
     if session.metrics.justTeleported then
         -- Update positions but don't validate
         session.metrics.lastServerPosition = currentPos
-        session.metrics.lastServerPositionTimestamp = GetGameTimer()
+        session.metrics.lastServerPositionTimestamp = Natives.GetGameTimer()
         session.metrics.lastValidPosition = currentPos
         return
     end
@@ -559,7 +825,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
     if session.metrics.lastServerPosition and session.metrics.lastServerPositionTimestamp then
         local lastPos = session.metrics.lastServerPosition
         local lastTimestamp = session.metrics.lastServerPositionTimestamp
-        local currentServerTimestamp = GetGameTimer()
+        local currentServerTimestamp = Natives.GetGameTimer()
         local timeDiffMs = currentServerTimestamp - lastTimestamp
 
         if timeDiffMs >= minTimeDiff then
@@ -592,7 +858,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
                     -- Set teleport grace period to avoid multiple detections for the same teleport
                     session.metrics.justTeleported = true
                     local teleportGracePeriod = Thresholds.teleportGracePeriod or 5 -- Default 5 seconds
-                    SetTimeout(teleportGracePeriod * 1000, function()
+                    Natives.SetTimeout(teleportGracePeriod * 1000, function()
                         if session and session.metrics then
                             session.metrics.justTeleported = false
                         end
@@ -624,9 +890,9 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
                 reasonSuffix = " (Adjusted for movement state)"
             elseif session.metrics.isInVehicle then
                 -- Get vehicle model and adjust threshold based on vehicle type
-                local ped = GetPlayerPed(playerId)
-                local vehicle = GetVehiclePedIsIn(ped, false)
-                local vehicleClass = GetVehicleClass(vehicle)
+                local ped = Natives.GetPlayerPed(playerId)
+                local vehicle = Natives.GetVehiclePedIsIn(ped, false)
+                local vehicleClass = Natives.GetEntityModel(vehicle) -- Use model as fallback for class
 
                 -- Higher threshold for super cars, planes, helicopters
                 if vehicleClass == 7 or vehicleClass == 15 or vehicleClass == 16 then
@@ -681,25 +947,27 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
                 -- Perform noclip detection using raycasting if enabled
                 if Thresholds.enableNoclipDetection and session.metrics.lastValidPosition then
                     local lastValidPos = session.metrics.lastValidPosition
-                    local moveDistance = #(currentPos - lastValidPos)
+                    local moveDistance = #(Natives.vector3(currentPos.x, currentPos.y, currentPos.z) - Natives.vector3(lastValidPos.x, lastValidPos.y, lastValidPos.z))
 
                     -- Only check for noclip if the distance is significant but not too large
                     if moveDistance > noclipTolerance and moveDistance < teleportThreshold / 2 then
-                        local sourcePed = GetPlayerPed(playerId)
+                        local sourcePed = Natives.GetPlayerPed(playerId)
                         if sourcePed and sourcePed ~= -1 then
                             -- Perform raycast to check if there are obstacles between positions
-                            local rayStart = vector3(lastValidPos.x, lastValidPos.y, lastValidPos.z + 0.5) -- Offset slightly above ground
-                            local rayEnd = vector3(currentPos.x, currentPos.y, currentPos.z + 0.5)
+                            local rayStart = Natives.vector3(lastValidPos.x, lastValidPos.y, lastValidPos.z + 0.5) -- Offset slightly above ground
+                            local rayEnd = Natives.vector3(currentPos.x, currentPos.y, currentPos.z + 0.5)
 
                             -- Use async raycast with a small wait (not ideal but better than sync)
-                            local rayHandle = StartShapeTestRay(rayStart.x, rayStart.y, rayStart.z, rayEnd.x, rayEnd.y, rayEnd.z, 1, sourcePed, 0)
-                            Citizen.Wait(50) -- Small wait for raycast to complete
-                            local retval, hit, endCoords, surfaceNormal, entityHit = GetShapeTestResult(rayHandle)
+                            local rayHandle = Natives.StartShapeTestRay(rayStart.x, rayStart.y, rayStart.z, rayEnd.x,
+                                rayEnd.y, rayEnd.z, 1, sourcePed, 0)
+                            if _G.Citizen then _G.Citizen.Wait(50) end -- Small wait for raycast to complete
+                            local retval, hit, endCoords, surfaceNormal, entityHit = Natives.GetShapeTestResult(
+                                rayHandle)
 
-                            if hit == 1 then -- If raycast hit something
-                                local hitPos = vector3(endCoords.x, endCoords.y, endCoords.z)
-                                local distToHit = #(hitPos - rayStart)
-                                local targetDist = #(rayEnd - rayStart)
+                            if hit == 1 and endCoords then -- If raycast hit something and we have valid coordinates
+                                local hitPos = Natives.vector3(endCoords.x or 0, endCoords.y or 0, endCoords.z or 0)
+                                local distToHit = #(Natives.vector3(hitPos.x, hitPos.y, hitPos.z) - Natives.vector3(rayStart.x, rayStart.y, rayStart.z))
+                                local targetDist = #(Natives.vector3(rayEnd.x, rayEnd.y, rayEnd.z) - Natives.vector3(rayStart.x, rayStart.y, rayStart.z))
 
                                 -- If hit occurred significantly before destination, potential noclip
                                 if distToHit < (targetDist - noclipTolerance) then
@@ -736,7 +1004,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
 
     -- Always update the last known position and timestamp for the next check
     session.metrics.lastServerPosition = currentPos
-    session.metrics.lastServerPositionTimestamp = GetGameTimer()
+    session.metrics.lastServerPositionTimestamp = Natives.GetGameTimer()
 end
 
 --[[
@@ -751,7 +1019,7 @@ end
     @param session (table): The player's session data object.
 ]]
 function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, clientTimestamp, session)
-    local playerName = GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
+    local playerName = Natives.GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
     -- Ensure session and metrics are available.
     if not session or not session.metrics then
         Log(("^1Detections Validation Error: Cannot validate health update for %s (ID: %d) - Session or metrics data missing.^7"):format(playerName, playerId), 1)
@@ -767,7 +1035,7 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
         -- Still update the health/armor to prevent false detections after grace period ends.
         session.metrics.lastServerHealth = currentHealth
         session.metrics.lastServerArmor = currentArmor
-        session.metrics.lastServerHealthTimestamp = GetGameTimer()
+        session.metrics.lastServerHealthTimestamp = Natives.GetGameTimer()
         return -- Skip validation during grace period.
     end
 
@@ -777,11 +1045,22 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
     local minHealthDamageThreshold = Thresholds.minHealthDamageThreshold or 5.0 -- Minimum health damage to consider for godmode detection
     local godModeDetectionWindow = Thresholds.godModeDetectionWindow or 60 -- Time window in seconds for godmode pattern detection
 
+    -- Server-Side Invincibility Check (Guideline 4)
+    local isInvincible = Natives.GetPlayerInvincible(playerId)
+    if isInvincible then
+        local reason = "Server detected player is invincible (GetPlayerInvincible returned true)"
+        local details = { invincibleStatus = true }
+        -- Apply penalty immediately for server-confirmed invincibility.
+        ApplyPenalty(playerId, session, "ServerInvincibleCheck",
+            { reason = reason, details = details, serverValidated = true }, "Critical")
+        -- Potentially skip further health checks if confirmed invincible, or let them run for logging.
+        -- For now, we'll let other checks run too.
+    end
     -- Check for suspicious health regeneration.
     if session.metrics.lastServerHealth and session.metrics.lastServerHealthTimestamp then
         local lastHealth = session.metrics.lastServerHealth
         local lastTimestamp = session.metrics.lastServerHealthTimestamp
-        local currentServerTimestamp = GetGameTimer()
+        local currentServerTimestamp = Natives.GetGameTimer()
         local timeDiffMs = currentServerTimestamp - lastTimestamp
 
         -- Store health history for pattern analysis
@@ -826,9 +1105,44 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
         end
 
         -- Check for godmode pattern (no health decrease despite taking damage)
-        -- This requires additional data from damage events which would ideally be tracked separately
-        -- For now, we'll use a simplified approach based on health history
         if #session.metrics.healthHistory >= 3 then
+            -- Correlate health changes with damage events
+            if session.metrics.damageEvents and #session.metrics.damageEvents > 0 then
+                -- Calculate expected health after damage
+                local expectedHealth = session.metrics.lastServerHealth
+                local relevantDamageEvents = 0
+                local totalExpectedDamage = 0
+
+                for _, damageEvent in ipairs(session.metrics.damageEvents) do
+                    -- Only consider recent damage events
+                    if (os.time() - damageEvent.timestamp) < 10 then -- Last 10 seconds
+                        relevantDamageEvents = relevantDamageEvents + 1
+                        totalExpectedDamage = totalExpectedDamage + damageEvent.damage
+                        expectedHealth = math.max(0, expectedHealth - damageEvent.damage)
+                    end
+                end
+
+                -- If player took significant damage but health didn't decrease appropriately
+                if relevantDamageEvents > 0 and totalExpectedDamage > minHealthDamageThreshold and
+                    (currentHealth > (expectedHealth + (Thresholds.healthDamageToleranceThreshold or 10.0))) then
+                    local reason = string.format(
+                        "Health didn't decrease appropriately after taking damage (Current: %.1f, Expected: %.1f, Damage Events: %d)",
+                        currentHealth, expectedHealth, relevantDamageEvents)
+                    local details = {
+                        currentHealth = currentHealth,
+                        expectedHealth = expectedHealth,
+                        difference = currentHealth - expectedHealth,
+                        damageEvents = relevantDamageEvents,
+                        totalDamage = totalExpectedDamage
+                    }
+
+                    -- Apply penalty for godmode violation
+                    ApplyPenalty(playerId, session, "ServerGodModeCheck",
+                        { reason = reason, details = details, serverValidated = true }, "High")
+                end
+            end
+
+            -- Also use pattern-based detection as a fallback
             local godModePattern = DetectGodModePattern(session.metrics.healthHistory, godModeDetectionWindow, minHealthDamageThreshold)
 
             if godModePattern then
@@ -936,6 +1250,47 @@ function DetectGodModePattern(healthHistory, timeWindow, minDamageThreshold)
 end
 
 
+-- #############################################################################
+-- ## Damage Event Tracking ##
+-- #############################################################################
+
+--[[
+    Tracks a damage event for a player.
+    This should be called when a player takes damage from any source.
+
+    @param playerId (number): The server ID of the player who took damage.
+    @param damageAmount (number): The amount of damage taken.
+    @param weaponHash (number): The weapon hash that caused the damage.
+    @param attacker (number): The server ID of the attacker (if applicable).
+]]
+function Detections.TrackDamageEvent(playerId, damageAmount, weaponHash, attacker)
+    -- Get the player's session
+    local session = NexusGuardServer.Core.GetSession(playerId)
+    if not session or not session.metrics then return end
+
+    -- Initialize damage events array if it doesn't exist
+    if not session.metrics.damageEvents then
+        session.metrics.damageEvents = {}
+    end
+
+    -- Add the damage event
+    table.insert(session.metrics.damageEvents, {
+        damage = damageAmount,
+        weapon = weaponHash,
+        attacker = attacker,
+        timestamp = os.time()
+    })
+
+    -- Mark the most recent health history entry as damaged
+    if session.metrics.healthHistory and #session.metrics.healthHistory > 0 then
+        session.metrics.healthHistory[#session.metrics.healthHistory].damaged = true
+    end
+
+    -- Limit history size
+    if #session.metrics.damageEvents > 20 then
+        table.remove(session.metrics.damageEvents, 1)
+    end
+end
 -- #############################################################################
 -- ## History and Pattern Analysis ##
 -- #############################################################################
@@ -1158,7 +1513,7 @@ end
     Cleanup old detection data to prevent memory bloat.
 ]]
 function Detections.Cleanup()
-    local currentTime = GetGameTimer()
+    local currentTime = Natives.GetGameTimer()
 
     -- Only run cleanup at the specified interval
     if currentTime - Detections.defaultThresholds.lastCleanup < Detections.defaultThresholds.cleanupInterval then
@@ -1166,7 +1521,7 @@ function Detections.Cleanup()
     end
 
     Detections.defaultThresholds.lastCleanup = currentTime
-    local connectedPlayers = GetPlayers()
+    local connectedPlayers = Natives.GetPlayers()
     local connectedIds = {}
 
     -- Create a lookup table of connected player IDs

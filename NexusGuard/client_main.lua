@@ -21,15 +21,11 @@
 
 -- NexusGuard Shared Modules
 local EventRegistry = require('shared/event_registry') -- Handles standardized network event names.
-local EventRegistry = require('shared/event_registry')
+-- REMOVED DUPLICATE REQUIRE
 if not EventRegistry then
     print("^1[NexusGuard] CRITICAL: Failed to load shared/event_registry.lua. Network event handling will fail.^7")
     -- Consider adding logic here to halt initialization if EventRegistry is crucial and missing.
 end
-
--- Global NexusGuard Instance (Initialized later)
--- Provides access to core functions and state for detectors.
-_G.NexusGuard = _G.NexusGuard or {}
 
 -- Detector Registry Module
 local DetectorRegistry = require('shared/detector_registry')
@@ -38,6 +34,7 @@ if not DetectorRegistry then
     -- Consider halting initialization if the registry is crucial.
 end
 
+-- REMOVED _G.NexusGuard ASSIGNMENT
 
 -- Environment Check & Debug Compatibility
 -- Attempts to detect if running outside a standard FiveM client environment (e.g., for testing).
@@ -107,7 +104,6 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     --[[
         NexusGuard Core Class
         Central management for client-side anti-cheat functionality.
-        Accessible globally via _G.NexusGuard after initialization.
     ]]
     local NexusGuardInstance = {
         -- Security Token: Received from the server for validating client->server communication.

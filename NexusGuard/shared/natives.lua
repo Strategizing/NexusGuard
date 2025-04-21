@@ -1,8 +1,18 @@
 --[[
     NexusGuard FiveM Natives Wrapper (shared/natives.lua)
 
-    A lightweight wrapper for FiveM native functions that provides error handling,
-    caching for expensive calls, and consistent behavior across the codebase.
+    A comprehensive wrapper for FiveM native functions that provides:
+    - Error handling and safe execution
+    - Performance optimization through caching
+    - Consistent behavior across the codebase
+    - Fallbacks for missing or failed native calls
+    - Support for both client and server environments
+    - Logging for critical native calls
+
+    Usage:
+    local Natives = require('shared/natives')
+    local playerCoords = Natives.GetEntityCoords(Natives.GetPlayerPed(playerId))
+    Natives.SetEntityCoords(ped, x, y, z, ...) -- Will log the call
 ]]
 
 local Natives = {}
@@ -24,23 +34,72 @@ local cache = {
 
 -- Environment detection
 local env = {
-    isServer = _G.IsDuplicityVersion and _G.IsDuplicityVersion() or false,
+    isServer = false, -- Will be set correctly below
     hasCitizen = _G.Citizen ~= nil
 }
 
+-- Detect if we're on the server side
+if _G.IsDuplicityVersion then
+    env.isServer = _G.IsDuplicityVersion()
+elseif _G.Citizen and _G.Citizen.IsDuplicityVersion then
+    env.isServer = _G.Citizen.IsDuplicityVersion()
+end
 -- Helper function to safely call natives with error handling
 local function safeCall(nativeName, defaultValue, ...)
-    if not _G[nativeName] then return defaultValue end
+    -- Check if the native exists in the global scope
+    local nativeFunc = _G[nativeName]
+    if not nativeFunc then
+        -- Check if it's a Citizen method (e.g., Citizen.CreateThread)
+        if string.find(nativeName, "%.") then
+            local parts = {}
+            for part in string.gmatch(nativeName, "[^%.]+") do table.insert(parts, part) end
+            if #parts == 2 and _G[parts[1]] and type(_G[parts[1]][parts[2]]) == "function" then
+                nativeFunc = _G[parts[1]][parts[2]]
+            end
+        end
+    end
 
-    local success, result = pcall(_G[nativeName], ...)
+    if not nativeFunc then
+        -- print(("^1[NexusGuard Natives] Warning: Native '%s' not found.^7"):format(nativeName)) -- Optional warning
+        return defaultValue
+    end
+
+    local success, result = pcall(nativeFunc, ...)
+    if not success then
+        -- Log the error but don't spam the console
+        if math.random() < 0.1 then -- Only log about 10% of errors to avoid spam
+            print(("^1[NexusGuard Natives] Error calling native '%s': %s^7"):format(nativeName, tostring(result)))
+        end
+    end
     return success and result or defaultValue
 end
 
+-- Helper function for logging critical native calls
+local function logCriticalNativeCall(nativeName, ...)
+    local source = "Unknown"
+    if env.isServer then
+        -- On server, 'source' is usually available in the event handler context, not directly here.
+        -- We might need to pass it explicitly if server-side monitoring is desired via this wrapper.
+        source = "Server Context"
+    else
+        -- On client, we can get the local player ID.
+        local playerId = safeCall('PlayerId', -1)
+        source = "Client:" .. tostring(playerId)
+    end
+    -- Basic logging for now. Could be expanded to send events.
+    local args = { ... }
+    local argsStr = ""
+    for i, v in ipairs(args) do
+        argsStr = argsStr .. tostring(v) .. (i < #args and ", " or "")
+    end
+    print(("^3[NexusGuard Native Monitor]^7 Critical native '%s' called by %s with args: [%s]^7"):format(nativeName,
+        source, argsStr))
+end
 -- Setup cache cleanup if Citizen is available
 if env.hasCitizen and _G.Citizen then
-    Citizen.CreateThread(function()
+    _G.Citizen.CreateThread(function()
         while true do
-            Citizen.Wait(cache.config.cleanupInterval)
+            _G.Citizen.Wait(cache.config.cleanupInterval)
 
             local currentTime = safeCall('GetGameTimer', 0)
             cache.lastCleanup = currentTime
@@ -102,6 +161,15 @@ function Natives.GetEntityCoords(entity)
     end, defaultValue, 100) -- 100ms cache for coords
 end
 
+-- Specific wrapper for SetEntityCoords to add logging
+function Natives.SetEntityCoords(entity, x, y, z, xAxis, yAxis, zAxis, clearArea)
+    -- Log the call (only on client for now, as server context is harder to get here)
+    if not env.isServer then
+        logCriticalNativeCall('SetEntityCoords', entity, x, y, z, xAxis, yAxis, zAxis, clearArea)
+    end
+    -- Call the actual native
+    return safeCall('SetEntityCoords', nil, entity, x, y, z, xAxis, yAxis, zAxis, clearArea)
+end
 -- Generate common entity functions
 local entityFunctions = {
     {name = "GetEntityVelocity", default = function() return _G.vector3 and _G.vector3(0, 0, 0) or {x=0, y=0, z=0} end},
@@ -126,6 +194,21 @@ end
 
 -- PLAYER NATIVES
 
+-- Specific wrapper for SetPlayerInvincible to add logging
+function Natives.SetPlayerInvincible(playerId, toggle)
+    -- Log the call (only on client for now)
+    if not env.isServer then
+        logCriticalNativeCall('SetPlayerInvincible', playerId, toggle)
+    end
+    -- Call the actual native
+    return safeCall('SetPlayerInvincible', nil, playerId, toggle)
+end
+
+-- Specific wrapper for GetPlayerInvincible (no logging needed, just safe call)
+function Natives.GetPlayerInvincible(playerId)
+    if not playerId or playerId < 1 then return false end
+    return safeCall('GetPlayerInvincible', false, playerId)
+end
 -- Generate common player functions
 local playerFunctions = {
     {name = "GetPlayers", default = {}, noPlayerId = true},
@@ -197,6 +280,9 @@ local pedFunctions = {
     {name = "IsPedSwimming", default = false},
     {name = "IsPedJumping", default = false},
     {name = "IsPedClimbing", default = false},
+    { name = "IsPedVaulting",            default = false },
+    { name = "IsPedGettingUp",           default = false },
+    { name = "IsPedInParachuteFreeFall", default = false },
     {name = "IsPedReloading", default = false},
     {name = "IsPedShooting", default = false}
 }
@@ -224,7 +310,7 @@ function Natives.GetAmmoInClip(ped, weaponHash)
 
     local success, result, ammo = pcall(function()
         if _G.GetAmmoInClip then
-            local r, a = GetAmmoInClip(ped, weaponHash)
+            local r, a = _G.GetAmmoInClip(ped, weaponHash)
             return r, a
         end
         return false, 0
@@ -283,12 +369,60 @@ function Natives.GetResourceMetadata(resourceName, metadataKey, index)
     return safeCall('GetResourceMetadata', nil, resourceName, metadataKey, index or 0)
 end
 
+-- RAYCAST NATIVES
+
+-- StartShapeTestRay - Performs a raycast from one point to another
+function Natives.StartShapeTestRay(x1, y1, z1, x2, y2, z2, flags, entity, p8)
+    if not x1 or not y1 or not z1 or not x2 or not y2 or not z2 then
+        return 0
+    end
+
+    flags = flags or 1
+    entity = entity or 0
+    p8 = p8 or 0
+
+    return safeCall('StartShapeTestRay', 0, x1, y1, z1, x2, y2, z2, flags, entity, p8)
+end
+
+-- GetShapeTestResult - Gets the result of a raycast
+function Natives.GetShapeTestResult(rayHandle)
+    if not rayHandle or rayHandle == 0 then
+        local zeroVec = Natives.vector3(0, 0, 0)
+        return 0, 0, zeroVec, zeroVec, 0
+    end
+
+    local success, result = pcall(function()
+        if _G.GetShapeTestResult then
+            return _G.GetShapeTestResult(rayHandle)
+        end
+        local zeroVec = Natives.vector3(0, 0, 0)
+        return 0, 0, zeroVec, zeroVec, 0
+    end)
+
+    if success then
+        return result
+    else
+        local zeroVec = Natives.vector3(0, 0, 0)
+        return 0, 0, zeroVec, zeroVec, 0
+    end
+end
 -- MISC NATIVES
 
+-- Vector3 function for consistent vector handling
+function Natives.vector3(x, y, z)
+    -- Use native vector3 if available
+    if _G.vector3 then
+        return _G.vector3(x or 0.0, y or 0.0, z or 0.0)
+    end
+
+    -- Fallback to table representation
+    return { x = x or 0.0, y = y or 0.0, z = z or 0.0 }
+end
 -- Generate common misc functions
 local miscFunctions = {
     {name = "GetGameTimer", default = 0, noParams = true},
-    {name = "ExecuteCommand", default = false, checkParam = true}
+    { name = "ExecuteCommand", default = false, checkParam = true },
+    { name = "SetTimeout",     default = false, checkParam = true }
 }
 
 -- Create all misc functions
@@ -332,4 +466,17 @@ function Natives.Wait(ms)
     return safeCall('Citizen.Wait', false, ms or 0)
 end
 
+-- Add wrappers for event triggering to potentially add logging/validation later
+function Natives.TriggerServerEvent(eventName, ...)
+    return safeCall('TriggerServerEvent', nil, eventName, ...)
+end
+
+function Natives.TriggerClientEvent(eventName, target, ...)
+    return safeCall('TriggerClientEvent', nil, eventName, target, ...)
+end
+
+-- Add wrapper for RegisterNetEvent
+function Natives.RegisterNetEvent(eventName)
+    return safeCall('RegisterNetEvent', nil, eventName)
+end
 return Natives

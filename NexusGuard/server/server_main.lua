@@ -1,3 +1,4 @@
+
 --[[
     NexusGuard Server Main Entry Point (server_main.lua)
 
@@ -226,7 +227,7 @@ function OnPlayerConnecting(playerName, setKickReason, deferrals)
     Log(("^2[NexusGuard]^7 Player connection approved: %s (ID: %d, License: %s)^7"):format(playerName, source, license or "N/A"), 2)
     -- Finalize the deferral, allowing the player to join.
     deferrals.done()
-end
+end)
 
 --[[
     Player Disconnected Handler Function (OnPlayerDropped)

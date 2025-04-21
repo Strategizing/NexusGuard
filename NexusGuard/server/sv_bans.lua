@@ -191,7 +191,7 @@ function Bans.Execute(playerId, reason, adminName, durationSeconds)
     if not source or source <= 0 then Log("^1Bans Error: Invalid player ID provided to Execute: " .. tostring(playerId) .. "^7", 1); return end
     local playerName = GetPlayerName(source)
     -- Ensure player is actually online.
-    if not playerName then Log("^1Bans Error: Cannot execute ban on player ID %d - Player not found online.^7"):format(source), 1); return end
+    if not playerName then Log(("^1Bans Error: Cannot execute ban on player ID %d - Player not found online.^7"):format(source), 1); return end
 
     -- Get player identifiers. License is crucial for effective bans.
     local license = GetPlayerIdentifierByType(source, 'license')

@@ -22,26 +22,27 @@ Config.AdminGroups = {"admin", "superadmin", "mod"} -- Groups considered admin b
 -- Example ESX groups: {"admin", "superadmin"}
 -- Example QBCore groups: {"admin", "god"} -- Or other high-level permission groups defined in your QBCore setup
 
--- !! CRITICAL !! YOU MUST CHANGE THIS VALUE !!
--- Generate a long, unique, random string (e.g., using a password manager or online generator).
--- This secret is VITAL for securing communication between the client and server.
--- **LEAVING THIS AS DEFAULT MAKES YOUR SERVER EXTREMELY VULNERABLE TO EXPLOITS.**
+-- #############################################################################
+-- ## !! CRITICAL SECURITY CONFIGURATION !! ##
+-- #############################################################################
+-- ## YOU **MUST** CHANGE THIS VALUE BEFORE STARTING YOUR SERVER! ##
+-- ## LEAVING THE DEFAULT VALUE WILL MAKE YOUR SERVER VULNERABLE! ##
+-- #############################################################################
+-- Generate a long, unique, random string (e.g., using a password manager or online generator like https://www.random.org/strings/).
+-- This secret is VITAL for securing communication between the client and server using HMAC-SHA256.
+-- **DO NOT SHARE THIS SECRET.** NexusGuard will log a CRITICAL error on startup if this is left as default.
 -- Example of a strong secret (DO NOT USE THIS EXAMPLE): "p$z^8@!L#s&G*f@D9j!K3m$n&P@r*T(w"
-Config.SecuritySecret = "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" -- CRITICAL: Must be changed
+Config.SecuritySecret = "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" -- CRITICAL: Must be changed before first run!
 
 -- Security Token Settings
 Config.Security = {
     TokenValidityWindow = 60, -- Seconds a token is considered valid after generation (Default: 60)
-    TokenCacheCleanupIntervalMs = 60000 -- Milliseconds between cleaning up expired tokens from the anti-replay cache (Default: 60000 = 1 minute)
+    TokenCacheCleanupIntervalMs = 60000, -- Milliseconds between cleaning up expired tokens from the anti-replay cache (Default: 60000 = 1 minute)
+    -- TODO: Implement replay prevention by tracking used token signatures within the validity window.
 }
 
--- Auto Configuration (Placeholder Features)
-Config.AutoConfig = {
-    enabled = true, -- Enable auto-configuration during installation
-    detectFramework = true, -- Auto-detect framework (ESX, QB, etc.)
-    importBanList = true, -- Import bans from existing ban systems
-    setupDatabase = true -- Attempt to set up database tables automatically
-}
+-- [[ DEPRECATED / PLACEHOLDER SECTIONS REMOVED ]]
+-- Config.AutoConfig removed as it was a non-functional placeholder.
 
 -- Detection Thresholds
 Config.Thresholds = {
@@ -153,8 +154,12 @@ Config.Detectors = {
     freecam = true,
     teleporting = true,
     menuDetection = true,
-    vehicleModification = true
-    -- aiDetection = true -- Removed placeholder AI detector toggle
+    vehicleModification = true,
+    -- resourceInjection = true, -- Note: Client-side resource injection detection is complex and often unreliable. Focus on server-side verification.
+    -- explosionSpamming = true, -- Note: Primarily handled server-side via explosionEvent handler.
+    -- objectSpamming = true, -- Note: Requires server-side entity creation monitoring.
+    -- entitySpawning = true, -- Note: Requires server-side entity creation monitoring.
+    -- freecam = true, -- Note: Freecam detection is notoriously difficult and prone to false positives.
 }
 
 -- Action Settings
@@ -170,11 +175,13 @@ Config.Actions = {
 
 -- Optional Features
 Config.Features = {
-    -- adminPanel = true, -- Removed placeholder
-    -- playerReports = true, -- Removed placeholder
+    -- [[ DEPRECATED / PLACEHOLDER SECTIONS REMOVED ]]
+    -- Config.Features.adminPanel removed (placeholder).
+    -- Config.Features.playerReports removed (placeholder).
+
     resourceVerification = {
-        enabled = false, -- DISABLED: Verify integrity of client resources (Requires careful configuration if enabled)
-        mode = "whitelist", -- "whitelist" or "blacklist"
+        enabled = false, -- DISABLED BY DEFAULT: Verify integrity of client resources. Requires careful configuration if enabled! See README.
+        mode = "whitelist", -- "whitelist" (recommended but requires listing ALL essential resources) or "blacklist" (blocks specific known cheat resources).
         -- Whitelist Mode: ONLY resources listed here are allowed. Add ALL essential FiveM, framework (ESX, QBCore), and core server resources.
         whitelist = {
             "chat",
@@ -255,14 +262,21 @@ Config.ScreenCapture = {
 -- Discord Integration
 Config.Discord = {
     enabled = false, -- DISABLED: Requires bot implementation and configuration below
-    botToken = "", -- !! REQUIRED for bot features (commands, etc.) - Requires separate bot implementation !! Your Discord bot token
-    guildId = "", -- !! REQUIRED for bot features !! Your Discord server ID
-    botCommandPrefix = "!ac", -- Command prefix for Discord bot
-    inviteLink = "discord.gg/yourserver", -- Discord invite link for players
+    -- #############################################################################
+    -- ## Discord Bot Integration (Requires Separate Bot Implementation) ##
+    -- #############################################################################
+    -- Enabling these features requires you to run a separate Discord bot application
+    -- (e.g., using discord.js, discord.py) that interacts with NexusGuard, potentially
+    -- via custom events, RCON, or a dedicated API if you build one.
+    -- NexusGuard itself only provides basic webhook logging and Rich Presence.
+    botToken = "", -- !! REQUIRED for bot features !! Your Discord bot token for your separate bot application.
+    guildId = "", -- !! REQUIRED for bot features !! Your Discord server ID where the bot operates.
+    botCommandPrefix = "!ac", -- Command prefix your separate bot should listen for.
+    inviteLink = "discord.gg/yourserver", -- Discord invite link (used in messages/presence).
 
     richPresence = {
-        enabled = false, -- DISABLED: Requires a valid appId below
-        appId = "1234567890", -- !! REQUIRED if enabled !! Discord Application ID (Create one at discord.com/developers/applications)
+        enabled = false, -- DISABLED BY DEFAULT: Enable Discord Rich Presence for players.
+        appId = "YOUR_DISCORD_APP_ID", -- !! REQUIRED if enabled !! Your Discord Application ID (Create one at discord.com/developers/applications). Replace "1234567890".
         largeImageKey = "logo", -- Large image key (Must be uploaded to Discord App Assets)
         smallImageKey = "shield", -- Small image key (Must be uploaded to Discord App Assets)
         updateInterval = 60, -- How often to update presence (seconds)
@@ -294,10 +308,10 @@ Config.Discord = {
         commands = {
             enabled = true,
             restrictToChannels = true, -- Restrict bot commands to specific channels
-            commandChannels = {"123456789"}, -- !! REQUIRED if restrictToChannels = true !! Channel IDs where commands are allowed
-            available = {
-                "status", -- Get server status
-                "players", -- List online players
+            commandChannels = {"YOUR_COMMAND_CHANNEL_ID"}, -- !! REQUIRED if restrictToChannels = true !! Channel IDs where your bot commands are allowed. Replace "123456789".
+            available = { -- List of commands your separate bot should implement.
+                "status", -- Example: Get server status
+                "players", -- Example: List online players
                 "ban", -- Ban player
                 "unban", -- Unban player
                 "kick", -- Kick player

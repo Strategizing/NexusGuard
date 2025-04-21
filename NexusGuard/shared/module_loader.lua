@@ -50,7 +50,15 @@ function ModuleLoader.Load(modulePath, isOptional)
     ModuleLoader.cache.loading[modulePath] = proxy
 
     -- Try to load the module
-    local success, module = pcall(require, modulePath)
+    local success, module = pcall(function()
+        -- Handle both standard require and ESX/QBCore style exports
+        local mod = require(modulePath)
+        if type(mod) ~= "table" and type(mod) ~= "function" then
+            -- Some FiveM resources return non-table values
+            return { _value = mod }
+        end
+        return mod
+    end)
 
     if not success then
         if isOptional then

@@ -68,9 +68,9 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 1.  Create a new Lua file in `client/detectors/`.
 2.  Follow the structure of `client/detectors/detector_template.lua`.
 3.  Define a unique `DetectorName` string variable within your new detector file. This name will be used as the key in `Config.Detectors` (in `config.lua`) to enable/disable it.
-4.  Implement the `Detector.Initialize(nexusGuardInstance, eventRegistry)` function. This function receives the core NexusGuard instance and the EventRegistry. Store the `nexusGuardInstance` locally (e.g., `self.NexusGuard = nexusGuardInstance`) if you need to access its functions (like `ReportCheat`) later. Use this function for any setup or configuration reading.
-5.  Implement the `Detector.Check()` function with your detection logic. Use the stored instance to report violations (e.g., `self.NexusGuard:ReportCheat(DetectorName, details)`). This handles the warning system and triggers the server event.
-6.  The registration block at the end (using `DetectorRegistry.Register`) will automatically register and start your detector if `Config.Detectors[DetectorName]` is set to `true`.
+4.  Implement the `Detector.Check()` function with your detection logic. Use `_G.NexusGuard:ReportCheat(DetectorName, details)` to report violations (this handles the warning system and triggers the server event).
+5.  Implement `Detector.Initialize()` if needed (e.g., to read specific config values).
+6.  The registration block at the end will automatically register and start your detector if `Config.Detectors[DetectorName]` is set to `true`.
 
 ## Common Issues & Troubleshooting
 

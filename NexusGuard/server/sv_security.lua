@@ -21,7 +21,9 @@
     - `SecureHash` provides a utility for hashing sensitive data.
 ]]
 
-local Utils = require('server/sv_utils') -- Load the utils module for logging.
+local Utils = require('server/sv_utils')                  -- Load the utils module for logging
+local Natives = require('shared/natives')                 -- Load the natives wrapper
+local Dependencies = require('shared/dependency_manager') -- Load the dependency manager
 local Log -- Local alias for Log, set during Initialize
 
 -- Local reference to the Config table, set during Initialize
@@ -36,6 +38,7 @@ local Security = {
     tokenCacheCleanupInterval = 60000, -- Default cleanup interval (ms), overridden by config
     lastTokenCacheCleanup = 0,         -- Timestamp (GetGameTimer) of the last cleanup.
     maxTimeDifference = 60,            -- Default validity window (seconds), overridden by config
+    nonceLength = 16,                  -- Length of the random nonce in bytes
 
     -- Security statistics for monitoring
     stats = {
@@ -60,11 +63,18 @@ function Security.Initialize(cfg, logFunc)
     Config = cfg or {} -- Store config reference
     Log = logFunc or function(...) print("[Security Fallback Log]", ...) end -- Store log function reference
 
+    -- Initialize the dependency manager
+    Dependencies.Initialize(Log)
     -- Read configurable values, using defaults if not present in config
     Security.maxTimeDifference = (Config.Security and Config.Security.TokenValidityWindow) or Security.maxTimeDifference
     Security.tokenCacheCleanupInterval = (Config.Security and Config.Security.TokenCacheCleanupIntervalMs) or Security.tokenCacheCleanupInterval
 
-    Log(("[Security] Initialized. Token Validity: %ds, Cache Cleanup Interval: %dms"):format(
+    -- Check for required dependencies
+    if not Dependencies.status.ox_lib.available then
+        Log("^1SECURITY CRITICAL: ox_lib not available. Security token system will have limited functionality.^7", 1)
+    end
+
+    Log(("^2[Security]^7 Initialized. Token Validity: %ds, Cache Cleanup Interval: %dms"):format(
         Security.maxTimeDifference, Security.tokenCacheCleanupInterval
     ), 3)
 end
@@ -72,19 +82,20 @@ end
 
 --[[
     Generates a secure token for a player using HMAC-SHA256.
-    The token consists of a timestamp and a signature calculated from the player ID, timestamp,
+    The token consists of a timestamp, nonce, and signature calculated from the player ID, timestamp, nonce,
     and the server's secret key (`Config.SecuritySecret`).
 
     @param playerId (number): The server ID of the player requesting the token.
-    @return (table | nil): A table `{ timestamp = number, signature = string }` on success, or nil on error
+    @return (table | nil): A table `{ timestamp = number, nonce = string, signature = string }` on success, or nil on error
                            (e.g., missing crypto library or security secret).
 ]]
 function Security.GenerateToken(playerId)
-    -- Ensure ox_lib crypto functions are available.
-    if not lib or not lib.crypto or not lib.crypto.hmac or not lib.crypto.hmac.sha256 then
-        Log("^1SECURITY CRITICAL: ox_lib crypto functions (lib.crypto.hmac.sha256) not available. Cannot generate security token. Ensure ox_lib is started before NexusGuard and is up-to-date.^7", 1)
+    -- Validate player ID
+    if not playerId or playerId <= 0 then
+        Log("^1SECURITY ERROR: Invalid player ID provided to GenerateToken.^7", 1)
         return nil
     end
+
     -- Retrieve the security secret from the local Config reference.
     local secret = (Config and Config.SecuritySecret)
     -- CRITICAL: Ensure the secret is set and is not the default placeholder value.
@@ -94,20 +105,62 @@ function Security.GenerateToken(playerId)
     end
 
     local timestamp = os.time() -- Current Unix timestamp.
-    -- Construct the message to be signed: "playerId:timestamp".
-    local message = tostring(playerId) .. ":" .. tostring(timestamp)
-    -- Calculate the HMAC-SHA256 signature using the secret key and the message.
-    local success, signature = pcall(lib.crypto.hmac.sha256, secret, message)
-    if not success or not signature then
-        Log(("^1SECURITY ERROR: Failed to generate HMAC-SHA256 signature for player %d: %s^7"):format(playerId, tostring(signature)), 1) -- 'signature' holds error message on pcall failure
+    -- Generate a random nonce for additional security (prevents replay attacks)
+    local nonce = Security.GenerateNonce()
+    if not nonce then
+        Log("^1SECURITY ERROR: Failed to generate nonce for token.^7", 1)
+        return nil
+    end
+
+    -- Construct the message to be signed: "playerId:timestamp:nonce".
+    local message = tostring(playerId) .. ":" .. tostring(timestamp) .. ":" .. nonce
+
+    -- Calculate the HMAC-SHA256 signature using the dependency manager
+    local signature = Dependencies.Crypto.hmac.sha256(secret, message)
+    if not signature then
+        Log(("^1SECURITY ERROR: Failed to generate HMAC-SHA256 signature for player %d^7"):format(playerId), 1)
         return nil
     end
 
     -- Track token generation in statistics
     Security.stats.tokensGenerated = Security.stats.tokensGenerated + 1
 
-    -- Return the token data table containing the timestamp and the calculated signature.
-    return { timestamp = timestamp, signature = signature }
+    -- Return the token data table containing the timestamp, nonce, and the calculated signature.
+    return { timestamp = timestamp, nonce = nonce, signature = signature }
+end
+
+--[[
+    Generates a cryptographically secure random nonce.
+    Used to prevent replay attacks in security tokens.
+
+    @return (string): A random nonce string, or nil on failure.
+]]
+function Security.GenerateNonce()
+    -- Try to use ox_lib's secure random function if available
+    if Dependencies.status.ox_lib.available and lib and lib.crypto and lib.crypto.randomBytes then
+        local success, result = pcall(function()
+            return lib.crypto.randomBytes(Security.nonceLength)
+        end)
+
+        if success and result then
+            return result
+        end
+    end
+
+    -- Fallback to a less secure but still reasonable method
+    local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    local length = Security.nonceLength * 2 -- Compensate for lower entropy
+    local nonce = ""
+
+    -- Seed the random number generator with current time and player count
+    math.randomseed(os.time() + os.clock() * 1000)
+
+    for i = 1, length do
+        local randIndex = math.random(1, #chars)
+        nonce = nonce .. string.sub(chars, randIndex, randIndex)
+    end
+
+    return nonce
 end
 
 --[[
@@ -119,16 +172,17 @@ end
     4. Anti-replay (checks if the signature has been used recently).
 
     @param playerId (number): The server ID of the player who supposedly sent the token.
-    @param tokenData (table): The received token table, expected: `{ timestamp = number, signature = string }`.
+    @param tokenData (table): The received token table, expected: `{ timestamp = number, nonce = string, signature = string }`.
     @return (boolean): True if the token is valid and has not been replayed, false otherwise.
 ]]
 function Security.ValidateToken(playerId, tokenData)
-    -- Ensure ox_lib crypto functions are available.
-    if not lib or not lib.crypto or not lib.crypto.hmac or not lib.crypto.hmac.sha256 then
-        Log("^1SECURITY CRITICAL: ox_lib crypto functions not available for ValidateToken. Cannot validate.^7", 1)
+    -- Validate player ID
+    if not playerId or playerId <= 0 then
+        Log("^1SECURITY ERROR: Invalid player ID provided to ValidateToken.^7", 1)
         Security.stats.tokensFailed = Security.stats.tokensFailed + 1
         return false
     end
+
     -- Retrieve the security secret from the local Config reference.
     local secret = (Config and Config.SecuritySecret)
     if not secret or secret == "" or secret == "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" then -- Check against actual default
@@ -136,6 +190,7 @@ function Security.ValidateToken(playerId, tokenData)
         Security.stats.tokensFailed = Security.stats.tokensFailed + 1
         return false
     end
+
     -- Validate the structure and presence of required fields in the received token data.
     if not tokenData or type(tokenData) ~= "table" or not tokenData.timestamp or not tokenData.signature then
         Log(("^1Security Warning: Invalid token data structure received from player %d.^7"):format(playerId), 1)
@@ -143,15 +198,22 @@ function Security.ValidateToken(playerId, tokenData)
         return false
     end
 
-    -- Validate data types of timestamp and signature.
+    -- Validate data types of timestamp, nonce, and signature.
     local receivedTimestamp = tonumber(tokenData.timestamp)
+    local receivedNonce = tokenData.nonce
     local receivedSignature = tokenData.signature
+
     if not receivedTimestamp or type(receivedSignature) ~= "string" then
         Log(("^1Security Warning: Invalid token data types (timestamp or signature) received from player %d.^7"):format(playerId), 1)
         Security.stats.tokensFailed = Security.stats.tokensFailed + 1
         return false
     end
 
+    -- Check if nonce is present (for backward compatibility with older clients)
+    local hasNonce = receivedNonce ~= nil and type(receivedNonce) == "string" and receivedNonce ~= ""
+    if not hasNonce then
+        Log(("^3Security Warning: Token from player %d missing nonce. Using legacy validation.^7"):format(playerId), 2)
+    end
     -- 1. Timestamp Check: Ensure the token's timestamp is within an acceptable window relative to the server's current time.
     local currentTime = os.time()
     -- Use the configured maximum allowed time difference.
@@ -161,11 +223,21 @@ function Security.ValidateToken(playerId, tokenData)
         return false -- Token is too old or from the future.
     end
 
-    -- 2. Signature Verification: Recalculate the expected signature using the received timestamp and player ID.
-    local message = tostring(playerId) .. ":" .. tostring(receivedTimestamp)
-    local success, expectedSignature = pcall(lib.crypto.hmac.sha256, secret, message)
-    if not success or not expectedSignature then
-        Log(("^1SECURITY ERROR: Failed to recalculate HMAC signature during validation for player %d: %s^7"):format(playerId, tostring(expectedSignature)), 1)
+    -- 2. Signature Verification: Recalculate the expected signature using the received timestamp, nonce, and player ID.
+    local message
+    if hasNonce then
+        -- Use the enhanced format with nonce
+        message = tostring(playerId) .. ":" .. tostring(receivedTimestamp) .. ":" .. receivedNonce
+    else
+        -- Fallback to legacy format without nonce
+        message = tostring(playerId) .. ":" .. tostring(receivedTimestamp)
+    end
+
+    local expectedSignature = Dependencies.Crypto.hmac.sha256(secret, message)
+    if not expectedSignature then
+        Log(
+            ("^1SECURITY ERROR: Failed to recalculate HMAC signature during validation for player %d^7"):format(playerId),
+            1)
         Security.stats.tokensFailed = Security.stats.tokensFailed + 1
         return false -- Internal error during recalculation.
     end
@@ -249,15 +321,26 @@ function Security.ValidateEventSource(source, requireSession)
     end
 
     -- Check if player is connected
-    if not GetPlayerEndpoint(source) then
+    if not Natives.GetPlayerEndpoint(source) then
         Log("^1[Security] Event from disconnected player ID: " .. tostring(source) .. "^7", 1)
         return false
     end
 
     -- Check for valid session if required
-    if requireSession and NexusGuardServer and NexusGuardServer.GetSession then
-        local session = NexusGuardServer.GetSession(source)
-        if not session then
+    if requireSession then
+        -- Try to access the global NexusGuardServer table safely
+        local hasSession = false
+        local success, result = pcall(function()
+            if _G.NexusGuardServer and type(_G.NexusGuardServer.GetSession) == "function" then
+                local session = _G.NexusGuardServer.GetSession(source)
+                return session ~= nil
+            end
+            return false
+        end)
+
+        hasSession = success and result
+
+        if not hasSession then
             Log("^1[Security] Event from player without valid session ID: " .. tostring(source) .. "^7", 1)
             return false
         end
@@ -274,19 +357,14 @@ end
     @return (string): The SHA-256 hash of the data, or nil on failure.
 ]]
 function Security.SecureHash(data)
-    if not lib or not lib.crypto or not lib.crypto.hash or not lib.crypto.hash.sha256 then
-        Log("^1SECURITY ERROR: ox_lib crypto hash functions not available.^7", 1)
-        return nil
-    end
-
     if not data or type(data) ~= "string" then
         Log("^1SECURITY ERROR: Invalid data provided for hashing.^7", 1)
         return nil
     end
 
-    local success, hash = pcall(lib.crypto.hash.sha256, data)
-    if not success or not hash then
-        Log("^1SECURITY ERROR: Failed to generate SHA-256 hash: " .. tostring(hash) .. "^7", 1)
+    local hash = Dependencies.Crypto.hash.sha256(data)
+    if not hash then
+        Log("^1SECURITY ERROR: Failed to generate SHA-256 hash.^7", 1)
         return nil
     end
 

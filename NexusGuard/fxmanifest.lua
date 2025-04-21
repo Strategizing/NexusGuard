@@ -6,6 +6,8 @@ description 'Modular FiveM Anti-Cheat Framework'
 version '0.7.0'
 
 shared_scripts {
+    'shared/natives.lua',            -- Load natives wrapper first
+    'shared/dependency_manager.lua', -- Load dependency manager
     'config.lua',
     'shared/event_registry.lua',
 }
@@ -17,26 +19,29 @@ client_scripts {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
-    'globals.lua', -- Load globals first to define API table
-    'server/sv_utils.lua',
+    'shared/module_loader.lua',      -- Load module loader first
+    'shared/natives.lua',            -- Load natives wrapper
+    'shared/dependency_manager.lua', -- Load dependency manager
+    'server/sv_utils.lua',           -- Load utils (needed for logging)
+    'server/sv_core.lua',            -- Load core module (handles module loading)
     'server/sv_permissions.lua',
     'server/sv_security.lua',
+    'server/sv_session.lua',        -- Load session management module
     'server/sv_bans.lua',
-    'server/sv_database.lua', -- Load new database module
-    'server/sv_discord.lua', -- Load new Discord module
-    'server/sv_event_handlers.lua', -- Load new event handlers module
-    'server/modules/*.lua',  -- Load other modules (like detections)
-    'server/server_main.lua' -- Load main server logic last
-    -- 'sql/setup.lua' -- Removed, DB init handled in sv_database.lua
+    'server/sv_database.lua',       -- Load database module
+    'server/sv_discord.lua',        -- Load Discord module
+    'server/sv_event_handlers.lua', -- Load event handlers module
+    'server/modules/*.lua',         -- Load other modules (like detections)
+    'globals.lua',                  -- Load globals to define API table (after modules are available)
+    'server/server_main.lua'        -- Load main server logic last
 }
 
-dependencies {
+dependency {
     'oxmysql',
     'screenshot-basic',
     'ox_lib'
 }
 
-exports {
+export {
     'GetNexusGuardServerAPI' -- Export the correct function name from globals.lua
-    -- 'GetCore' -- Removed potentially unused/old export
 }
