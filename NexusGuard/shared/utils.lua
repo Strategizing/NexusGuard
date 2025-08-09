@@ -220,28 +220,24 @@ function Utils.SerializeTable(tbl, indent)
     return result .. string.rep("  ", indent) .. "}"
 end
 
--- Secure hash function with fallbacks
+-- Secure hash function. Returns nil when no cryptographic hash function is available
 function Utils.Hash(data, algorithm)
     algorithm = algorithm or "sha256"
 
     -- Try ox_lib first
     local oxLib = Utils.GetOxLib('crypto')
-    if oxLib then
-        local success, result = pcall(oxLib.hash, algorithm, data)
-        if success then
-            return result
-        end
+    if not oxLib or not oxLib.hash then
+        Utils.Log("Crypto hashing unavailable - no suitable library found", Utils.logLevels.WARNING)
+        return nil
     end
 
-    -- Fallback to a simple hash function
-    Utils.Log("Crypto hashing failed, using simple hash function", Utils.logLevels.WARNING)
-    local hash = 0
-    for i = 1, #data do
-        hash = ((hash << 5) - hash) + string.byte(data, i)
-        hash = hash & hash -- Convert to 32bit integer
+    local success, result = pcall(oxLib.hash, algorithm, data)
+    if success then
+        return result
     end
 
-    return tostring(hash)
+    Utils.Log("Crypto hashing failed: %s", Utils.logLevels.WARNING, tostring(result))
+    return nil
 end
 
 -- Get connected players with caching
