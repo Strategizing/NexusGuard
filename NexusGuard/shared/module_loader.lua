@@ -28,7 +28,7 @@ local ModuleLoader = {
         stateValidator = 'server/modules/state_validator',
         networkMonitor = 'server/modules/network_monitor',
         resourceValidator = 'server/modules/resource_validator',
-        detections = 'server/modules/detections'
+        detections = 'server/modules/sv_detections'
     }
 }
 
@@ -61,19 +61,20 @@ function ModuleLoader.Load(modulePath, isOptional)
     end)
 
     if not success then
+        -- Clear loading flag before returning
+        ModuleLoader.cache.loading[modulePath] = nil
         if isOptional then
             -- Just return nil for optional modules that fail to load
-            ModuleLoader.cache.loading[modulePath] = nil
             return nil
         else
-            -- Log error and return empty table to prevent crashes
+            -- Log error and return nil
             print("^1[ModuleLoader] Failed to load module: " .. modulePath .. " - " .. tostring(module) .. "^7")
-            module = {}
+            return nil
         end
     end
 
-    -- Store the loaded module
-    ModuleLoader.cache.loaded[modulePath] = module
+    -- Store the loaded module's proxy
+    ModuleLoader.cache.loaded[modulePath] = proxy
 
     -- Fill in the proxy object for circular dependencies
     for k, v in pairs(module) do
@@ -83,7 +84,7 @@ function ModuleLoader.Load(modulePath, isOptional)
     -- Clear the loading flag
     ModuleLoader.cache.loading[modulePath] = nil
 
-    return module
+    return proxy
 end
 
 -- Load a module by its short name

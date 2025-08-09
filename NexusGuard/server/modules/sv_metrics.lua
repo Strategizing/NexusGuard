@@ -1,8 +1,14 @@
 local Metrics = {}
-local Core = exports["NexusGuard"]:GetCore()
+local Core
+
+-- Inject core reference after initialization
+function Metrics.Initialize(core)
+    Core = core
+end
 
 -- Initialize player metrics when they join
 function Metrics.InitializePlayer(playerId)
+    if not Core or not Core.PlayerMetrics then return end
     Core.PlayerMetrics[playerId] = {
         positions = {},           -- Track last N positions for movement validation
         health = {
@@ -26,6 +32,7 @@ end
 
 -- Update player position with context
 function Metrics.UpdatePosition(playerId, x, y, z, vx, vy, vz)
+    if not Core or not Core.PlayerMetrics then return end
     local metrics = Core.PlayerMetrics[playerId]
     if not metrics then return end
     
@@ -47,6 +54,7 @@ end
 
 -- Track weapon inventory
 function Metrics.UpdateWeapon(playerId, weaponHash, ammoCount)
+    if not Core or not Core.PlayerMetrics then return false end
     local metrics = Core.PlayerMetrics[playerId]
     if not metrics then return false end
     
@@ -64,6 +72,7 @@ end
 
 -- Record damage events for godmode detection
 function Metrics.RecordDamage(playerId, damage, isFatal)
+    if not Core or not Core.PlayerMetrics then return end
     local metrics = Core.PlayerMetrics[playerId]
     if not metrics then return end
     

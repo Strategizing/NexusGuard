@@ -9,7 +9,7 @@
     Note on Reporting:
     - This detector previously used `NexusGuard:ReportCheat`. However, client-side health/armor values
       can be easily spoofed. Therefore, reporting has been removed.
-    - The server (`server/modules/detections.lua`) now performs validation based on the periodic
+    - The server (`server/modules/sv_detections.lua`) now performs validation based on the periodic
       health/armor updates sent by `client_main.lua` (`SendHealthUpdate` function).
     - The checks remain here mainly for potential local logging (currently commented out) or future
       client-side heuristics if needed, but they do not trigger direct anti-cheat actions.

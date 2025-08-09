@@ -8,7 +8,7 @@
 
     Operation:
     - The actual detection logic (comparing the client's list against a server-defined
-      whitelist or blacklist) happens server-side in `server/modules/detections.lua`.
+      whitelist or blacklist) happens server-side in `server/modules/sv_detections.lua`.
     - This client-side script is responsible only for gathering and reporting the resource list.
 
     Dependencies:

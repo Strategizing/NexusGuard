@@ -22,18 +22,22 @@ server_scripts {
     'shared/module_loader.lua',      -- Load module loader first
     'shared/natives.lua',            -- Load natives wrapper
     'shared/dependency_manager.lua', -- Load dependency manager
-    'server/sv_utils.lua',           -- Load utils (needed for logging)
-    'server/sv_core.lua',            -- Load core module (handles module loading)
+    'server/sv_utils.lua',               -- Load utils (needed for logging)
+    'server/modules/sv_core.lua',        -- Core module (handles module loading)
     'server/sv_permissions.lua',
-    'server/sv_security.lua',
-    'server/sv_session.lua',        -- Load session management module
+    'server/modules/sv_security.lua',
+    'server/sv_session.lua',            -- Load session management module
     'server/sv_bans.lua',
-    'server/sv_database.lua',       -- Load database module
-    'server/sv_discord.lua',        -- Load Discord module
-    'server/sv_event_handlers.lua', -- Load event handlers module
-    'server/modules/*.lua',         -- Load other modules (like detections)
-    'globals.lua',                  -- Load globals to define API table (after modules are available)
-    'server/server_main.lua'        -- Load main server logic last
+    'server/sv_database.lua',           -- Load database module
+    'server/sv_discord.lua',            -- Load Discord module
+    'server/sv_event_handlers.lua',     -- Load event handlers module
+    'server/modules/sv_detections.lua', -- Detection processing
+    'server/modules/sv_metrics.lua',    -- Player metrics helpers
+    'server/modules/network_monitor.lua',
+    'server/modules/resource_validator.lua',
+    'server/modules/state_validator.lua',
+    'globals.lua',                      -- Load globals to define API table (after modules are available)
+    'server/server_main.lua'            -- Load main server logic last
 }
 
 dependency {

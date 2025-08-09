@@ -34,7 +34,7 @@ if not Log then
 end
 
 -- Load the Core module which will handle all other modules
-local Core = require('server/sv_core')
+local Core = require('server/modules/sv_core')
 
 -- Main container table for all server-side NexusGuard modules and shared data
 local NexusGuardServer = {
@@ -55,31 +55,18 @@ for moduleName, moduleRef in pairs(Core.modules) do
     Log(("^2[NexusGuard]^7 Module '%s' assigned to API."):format(moduleName), 3)
 end
 
--- #############################################################################
--- ## API Functions ##
--- #############################################################################
+-- Expose core convenience functions directly on the API
+NexusGuardServer.GetSession = Core.GetSession
+NexusGuardServer.CleanupSession = Core.CleanupSession
+NexusGuardServer.ProcessDetection = Core.ProcessDetection
+NexusGuardServer.GetStatus = Core.GetStatus
 
--- Gets or creates a session table for a given player ID.
--- Delegates to the Core module which handles the Session module.
-function NexusGuardServer.GetSession(playerId)
-    return Core.GetSession(playerId)
-end
-
--- Clean up session data when a player drops.
--- Delegates to the Core module which handles the Session module.
-function NexusGuardServer.CleanupSession(playerId)
-    return Core.CleanupSession(playerId)
-end
-
--- Process a detection report.
--- Delegates to the Core module which handles the Detections module.
-function NexusGuardServer.ProcessDetection(playerId, detectionType, detectionData)
-    return Core.ProcessDetection(playerId, detectionType, detectionData)
-end
-
--- Get the current status of the NexusGuard system.
-function NexusGuardServer.GetStatus()
-    return Core.GetStatus()
+-- Load and initialize the Metrics module
+local Metrics = require('server/modules/sv_metrics')
+if Metrics and type(Metrics.Initialize) == 'function' then
+    Metrics.Initialize(Core)
+    Core.modules.Metrics = Metrics
+    NexusGuardServer.Metrics = Metrics
 end
 
 -- #############################################################################

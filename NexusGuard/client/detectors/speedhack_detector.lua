@@ -10,7 +10,7 @@
     - Similar to other movement detectors, client-side speed values (`GetEntitySpeed`) can be
       manipulated or inaccurate. Direct reporting based solely on these values is unreliable.
     - This detector NO LONGER uses `NexusGuard:ReportCheat`.
-    - The definitive speed hack detection is performed SERVER-SIDE in `server/modules/detections.lua`
+    - The definitive speed hack detection is performed SERVER-SIDE in `server/modules/sv_detections.lua`
       by analyzing the distance traveled between periodic position updates received from the client
       (`NEXUSGUARD_POSITION_UPDATE` event).
     - The checks remain here primarily for potential local logging (currently commented out) or
@@ -132,7 +132,7 @@ function Detector.Check()
     end
 
     -- No NexusGuard:ReportCheat calls are made from this detector anymore.
-    -- Server-side position validation in `server/modules/detections.lua` handles actual speed hack detection.
+    -- Server-side position validation in `server/modules/sv_detections.lua` handles actual speed hack detection.
     return true -- Indicate check cycle completed.
 end
 

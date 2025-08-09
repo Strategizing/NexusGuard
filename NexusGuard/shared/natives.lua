@@ -74,6 +74,11 @@ local function safeCall(nativeName, defaultValue, ...)
     return success and result or defaultValue
 end
 
+-- Expose environment check through the wrapper
+function Natives.IsDuplicityVersion()
+    return safeCall('IsDuplicityVersion', false)
+end
+
 -- Helper function for logging critical native calls
 local function logCriticalNativeCall(nativeName, ...)
     local source = "Unknown"
@@ -153,7 +158,7 @@ end
 
 -- Get entity coordinates with caching
 function Natives.GetEntityCoords(entity)
-    local defaultValue = _G.vector3 and _G.vector3(0, 0, 0) or {x=0, y=0, z=0}
+    local defaultValue = nil
     if not Natives.DoesEntityExist(entity) then return defaultValue end
 
     return getCachedOrFetch('entity', entity, function(ent)
@@ -212,7 +217,7 @@ end
 -- Generate common player functions
 local playerFunctions = {
     {name = "GetPlayers", default = {}, noPlayerId = true},
-    {name = "GetPlayerName", default = "Unknown"},
+    {name = "GetPlayerName", default = nil},
     {name = "GetPlayerPed", default = 0},
     {name = "GetPlayerPing", default = 0},
     {name = "IsPlayerFreeAiming", default = false}

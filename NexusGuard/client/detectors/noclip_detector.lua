@@ -11,7 +11,7 @@
     - This detector previously used `NexusGuard:ReportCheat`. However, client-side position
       and ground checks can be unreliable or bypassed. Reporting has been removed.
     - Server-side validation, particularly using raycasting as implemented in
-      `server/modules/detections.lua` (handling `NEXUSGUARD_POSITION_UPDATE`), is the
+      `server/modules/sv_detections.lua` (handling `NEXUSGUARD_POSITION_UPDATE`), is the
       more robust method for detecting noclip/teleportation through objects.
     - This client-side check remains as a potential heuristic or for local logging,
       but it does not trigger direct anti-cheat actions. False positives are possible,

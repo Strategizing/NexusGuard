@@ -35,6 +35,10 @@ local mockNatives = {
     IsDuplicityVersion = function()
         return true -- Simulate server-side
     end
+    ,
+    DoesEntityExist = function(entityId)
+        return true
+    end
 }
 
 -- Override the global native functions for testing

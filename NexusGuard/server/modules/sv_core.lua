@@ -107,17 +107,17 @@ function Core.LoadModules()
     -- Load each module in order
     for _, moduleName in ipairs(moduleLoadOrder) do
         local startTime = os.clock()
+        local lowerName = string.lower(moduleName)
+
+        -- Try modules directory first, then root server directory
         local success, module = pcall(function()
-            return require('server/sv_' .. string.lower(moduleName))
+            return require('server/modules/sv_' .. lowerName)
         end)
-        
+
         if not success then
-            -- Special case for Detections which is in a subdirectory
-            if moduleName == "Detections" then
-                success, module = pcall(function()
-                    return require('server/modules/detections')
-                end)
-            end
+            success, module = pcall(function()
+                return require('server/sv_' .. lowerName)
+            end)
         end
         
         if success and module then
@@ -127,7 +127,7 @@ function Core.LoadModules()
             -- Initialize the module if it has an Initialize function
             if type(module.Initialize) == "function" then
                 local initSuccess, err = pcall(function()
-                    module.Initialize(Config, Log)
+                    module.Initialize(Config, Log, Core.modules)
                 end)
                 
                 if not initSuccess then
