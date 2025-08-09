@@ -594,6 +594,29 @@ function RegisterNexusGuardServerEvents()
             NexusGuardServer.Session.UpdateActivity(source)
         end
 
+        -- Pre-calculate health/armor deltas to require sustained or larger changes before flagging
+        local metrics = session.metrics
+        local thresholds = NexusGuardServer.Config and NexusGuardServer.Config.Thresholds or {}
+        local armorThreshold = thresholds.serverSideArmorThreshold or 105.0
+
+        metrics.healthIncreaseBuffer = metrics.healthIncreaseBuffer or 0
+        metrics.armorOverageCount = metrics.armorOverageCount or 0
+        metrics.damageEvents = metrics.damageEvents or {} -- hook for future damage-event correlation
+
+        -- Track cumulative health increases since last server check
+        if metrics.lastServerHealth and currentHealth > metrics.lastServerHealth then
+            metrics.healthIncreaseBuffer = metrics.healthIncreaseBuffer + (currentHealth - metrics.lastServerHealth)
+        else
+            metrics.healthIncreaseBuffer = 0
+        end
+
+        -- Track repeated armor values exceeding the configured threshold
+        if currentArmor > armorThreshold then
+            metrics.armorOverageCount = metrics.armorOverageCount + 1
+        else
+            metrics.armorOverageCount = 0
+        end
+
         -- Call the validation function in the Detections module.
         if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidateHealthUpdate then
             NexusGuardServer.Detections.ValidateHealthUpdate(source, currentHealth, currentArmor, clientTimestamp, session)

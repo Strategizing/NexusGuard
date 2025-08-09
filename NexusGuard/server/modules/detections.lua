@@ -1086,8 +1086,18 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
             local regenRate = 0.0
             if timeDiffMs > 0 then regenRate = healthIncrease / (timeDiffMs / 1000.0) end -- Regen rate in HP/sec.
 
-            -- Flag if regen rate exceeds threshold
+            -- Track consecutive regen violations for sustained increases
+            session.metrics.regenViolationCount = session.metrics.regenViolationCount or 0
             if regenRate > serverHealthRegenThreshold then
+                session.metrics.regenViolationCount = session.metrics.regenViolationCount + 1
+            else
+                session.metrics.regenViolationCount = 0
+            end
+
+            -- Flag only if regen is sustained or the total increase is large
+            if regenRate > serverHealthRegenThreshold and
+               (session.metrics.regenViolationCount >= 2 or
+                (session.metrics.healthIncreaseBuffer and session.metrics.healthIncreaseBuffer >= serverHealthRegenThreshold * 2)) then
                 local reason = string.format("Health regeneration rate %.2f HP/s (increase %.1f HP) exceeded threshold %.2f HP/s",
                     regenRate, healthIncrease, serverHealthRegenThreshold)
                 local details = {
@@ -1101,7 +1111,13 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
 
                 -- Apply penalty for health regeneration violation
                 ApplyPenalty(playerId, session, "ServerHealthRegenCheck", { reason = reason, details = details, serverValidated = true }, "Medium")
+
+                -- reset buffer after flagging
+                session.metrics.healthIncreaseBuffer = 0
+                session.metrics.regenViolationCount = 0
             end
+        else
+            session.metrics.regenViolationCount = 0
         end
 
         -- Check for godmode pattern (no health decrease despite taking damage)
@@ -1160,15 +1176,24 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
     end
 
     -- Check if current armor exceeds the configured maximum threshold.
+    session.metrics.armorOverageCount = session.metrics.armorOverageCount or 0
     if currentArmor > serverArmorMax then
-        local reason = string.format("Armor value %.1f exceeded maximum allowed %.1f", currentArmor, serverArmorMax)
-        local details = {
-            armor = currentArmor,
-            threshold = serverArmorMax
-        }
+        session.metrics.armorOverageCount = session.metrics.armorOverageCount + 1
 
-        -- Apply penalty for armor violation
-        ApplyPenalty(playerId, session, "ServerArmorCheck", { reason = reason, details = details, serverValidated = true }, "Medium")
+        if session.metrics.armorOverageCount >= 2 or currentArmor > (serverArmorMax + 5.0) then
+            local reason = string.format("Armor value %.1f exceeded maximum allowed %.1f", currentArmor, serverArmorMax)
+            local details = {
+                armor = currentArmor,
+                threshold = serverArmorMax
+            }
+
+            -- Apply penalty for armor violation
+            ApplyPenalty(playerId, session, "ServerArmorCheck", { reason = reason, details = details, serverValidated = true }, "Medium")
+
+            session.metrics.armorOverageCount = 0
+        end
+    else
+        session.metrics.armorOverageCount = 0
     end
 
     -- Update the last known health, armor, and timestamp in the session metrics.
