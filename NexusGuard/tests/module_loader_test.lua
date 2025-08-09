@@ -13,42 +13,57 @@ local ModuleLoader = require('shared/module_loader')
 
 -- Mock modules for testing
 local mockModules = {
-    ['test/module_a'] = {
-        name = 'Module A',
-        getValue = function() return 'A' end
-    },
-    ['test/module_b'] = {
-        name = 'Module B',
-        getValue = function() return 'B' end,
-        getDependencyValue = function() 
-            local ModuleA = ModuleLoader.Load('test/module_a')
-            return ModuleA.getValue() 
-        end
-    },
-    ['test/circular_a'] = {
-        name = 'Circular A',
-        getValue = function() return 'Circular A' end,
-        getDependencyValue = function() 
-            local CircularB = ModuleLoader.Load('test/circular_b')
-            return CircularB.getValue() 
-        end
-    },
-    ['test/circular_b'] = {
-        name = 'Circular B',
-        getValue = function() return 'Circular B' end,
-        getDependencyValue = function() 
-            local CircularA = ModuleLoader.Load('test/circular_a')
-            return CircularA.getValue() 
-        end
-    },
-    ['test/nonexistent'] = nil
+    ['test/module_a'] = function()
+        return {
+            name = 'Module A',
+            getValue = function() return 'A' end
+        }
+    end,
+    ['test/module_b'] = function()
+        return {
+            name = 'Module B',
+            getValue = function() return 'B' end,
+            getDependencyValue = function()
+                local ModuleA = ModuleLoader.Load('test/module_a')
+                return ModuleA.getValue()
+            end
+        }
+    end,
+    ['test/circular_a'] = function()
+        return {
+            name = 'Circular A',
+            getValue = function() return 'Circular A' end,
+            getDependencyValue = function()
+                local CircularB = ModuleLoader.Load('test/circular_b')
+                return CircularB.getValue()
+            end
+        }
+    end,
+    ['test/circular_b'] = function()
+        return {
+            name = 'Circular B',
+            getValue = function() return 'Circular B' end,
+            getDependencyValue = function()
+                local CircularA = ModuleLoader.Load('test/circular_a')
+                return CircularA.getValue()
+            end
+        }
+    end,
+    ['shared/utils'] = {
+        name = 'Utils',
+        getValue = function() return 'Utils' end
+    }
 }
 
 -- Override the require function for testing
 local originalRequire = _G.require
 _G.require = function(modulePath)
-    if mockModules[modulePath] then
-        return mockModules[modulePath]
+    local mock = mockModules[modulePath]
+    if mock then
+        if type(mock) == 'function' then
+            return mock()
+        end
+        return mock
     end
     return originalRequire(modulePath)
 end
@@ -105,14 +120,16 @@ end)
 -- Test: Load a non-existent module
 test("Load a non-existent module", function()
     local nonexistentModule = ModuleLoader.Load('test/nonexistent')
-    assert(nonexistentModule == nil, "Non-existent module should return nil")
+    assert(type(nonexistentModule) == 'table' and next(nonexistentModule) == nil,
+        "Non-existent module should return empty table")
 end)
 
 -- Test: Load an optional module
 test("Load an optional module", function()
+    ModuleLoader.ClearCache()
     local nonexistentModule = ModuleLoader.Load('test/nonexistent', true)
     assert(nonexistentModule == nil, "Optional non-existent module should return nil without error")
-    
+
     local moduleA = ModuleLoader.Load('test/module_a', true)
     assert(moduleA ~= nil, "Optional existing module should be loaded")
 end)
@@ -130,6 +147,23 @@ test("Clear cache", function()
     ModuleLoader.ClearCache()
     local moduleA2 = ModuleLoader.Load('test/module_a')
     assert(moduleA1 ~= moduleA2, "Different module instances should be returned after clearing cache")
+end)
+
+-- Test: Load a module by short name
+test("Load a module by short name", function()
+    local utils = ModuleLoader.LoadByName('utils')
+    assert(utils ~= nil, "Utils module should be loaded by short name")
+    assert(utils.name == 'Utils', "Utils module should have the correct name")
+end)
+
+-- Test: Handle unknown module name
+test("Handle unknown module name", function()
+    local unknownModule = ModuleLoader.LoadByName('unknownModule')
+    assert(type(unknownModule) == 'table' and next(unknownModule) == nil,
+        "Unknown module should return empty table")
+
+    local optionalUnknown = ModuleLoader.LoadByName('unknownModule', true)
+    assert(optionalUnknown == nil, "Optional unknown module should return nil")
 end)
 
 -- Print test summary
