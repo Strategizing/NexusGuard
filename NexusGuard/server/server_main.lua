@@ -374,6 +374,18 @@ function RegisterNexusGuardServerEvents()
             return
         end
 
+        -- Retrieve player session via API.
+        local session = NexusGuardServer.GetSession(source)
+        if not session or not session.metrics then
+            Log(("^1[NexusGuard] API Player session or metrics not found for %s (ID: %d) during resource check.^7"):format(playerName, source), 1)
+            return
+        end
+
+        -- Mark the session as active.
+        if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
+            NexusGuardServer.Session.UpdateActivity(source)
+        end
+
         Log(("^3[NexusGuard]^7 Received resource list from %s (ID: %d) (%d resources) via event '%s'^7"):format(playerName, source, #clientResourcesList, EventRegistry:GetEventName('SYSTEM_RESOURCE_CHECK')), 3)
 
         -- Check if resource verification is enabled in the config.
@@ -430,7 +442,6 @@ function RegisterNexusGuardServerEvents()
                     NexusGuardServer.Discord.Send("general", "Resource Mismatch", ("Player: %s (ID: %d)\nReason: %s"):format(playerName, source, reason), NexusGuardServer.Config.Discord.webhooks and NexusGuardServer.Config.Discord.webhooks.general)
                 end
                 -- Process this as a detection event.
-                local session = NexusGuardServer.GetSession(source) -- Get session via API
                 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
                     NexusGuardServer.Detections.Process(source, "ResourceMismatch", { mismatched = MismatchedResources, mode = checkMode }, session)
                 end
