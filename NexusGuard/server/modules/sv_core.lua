@@ -1,5 +1,5 @@
 --[[
-    NexusGuard Core Module (server/sv_core.lua)
+    NexusGuard Core Module (server/modules/sv_core.lua)
 
     Purpose:
     - Provides the central API initialization and management
@@ -95,56 +95,48 @@ end
 ]]
 function Core.LoadModules()
     local moduleLoadOrder = {
-        "Security",
-        "Session",
-        "Database",
-        "Bans",
-        "Discord",
-        "Detections",
-        "EventHandlers"
+        { name = "Security", path = "server/modules/sv_security" },
+        { name = "Session", path = "server/sv_session" },
+        { name = "Database", path = "server/sv_database" },
+        { name = "Bans", path = "server/sv_bans" },
+        { name = "Discord", path = "server/sv_discord" },
+        { name = "Detections", path = "server/modules/sv_detections" },
+        { name = "Metrics", path = "server/modules/sv_metrics" },
+        { name = "EventHandlers", path = "server/sv_event_handlers" }
     }
-    
+
     -- Load each module in order
-    for _, moduleName in ipairs(moduleLoadOrder) do
+    for _, mod in ipairs(moduleLoadOrder) do
         local startTime = os.clock()
         local success, module = pcall(function()
-            return require('server/sv_' .. string.lower(moduleName))
+            return require(mod.path)
         end)
-        
-        if not success then
-            -- Special case for Detections which is in a subdirectory
-            if moduleName == "Detections" then
-                success, module = pcall(function()
-                    return require('server/modules/detections')
-                end)
-            end
-        end
-        
+
         if success and module then
             -- Store the module reference
-            Core.modules[moduleName] = module
-            
+            Core.modules[mod.name] = module
+
             -- Initialize the module if it has an Initialize function
             if type(module.Initialize) == "function" then
                 local initSuccess, err = pcall(function()
-                    module.Initialize(Config, Log)
+                    module.Initialize(Config, Log, Core)
                 end)
-                
+
                 if not initSuccess then
-                    Log(("^1[Core]^7 Failed to initialize module '%s': %s"):format(moduleName, tostring(err)), 1)
+                    Log(("^1[Core]^7 Failed to initialize module '%s': %s"):format(mod.name, tostring(err)), 1)
                     return false
                 end
             end
-            
+
             -- Record load time
-            Core.metrics.moduleLoadTimes[moduleName] = os.clock() - startTime
-            Log(("^2[Core]^7 Loaded module '%s' in %.2f ms"):format(moduleName, (os.clock() - startTime) * 1000), 3)
+            Core.metrics.moduleLoadTimes[mod.name] = os.clock() - startTime
+            Log(("^2[Core]^7 Loaded module '%s' in %.2f ms"):format(mod.name, (os.clock() - startTime) * 1000), 3)
         else
-            Log(("^1[Core]^7 Failed to load module '%s'"):format(moduleName), 1)
+            Log(("^1[Core]^7 Failed to load module '%s'"):format(mod.name), 1)
             return false
         end
     end
-    
+
     return true
 end
 

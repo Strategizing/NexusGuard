@@ -11,7 +11,7 @@
     - Client-side position data can be manipulated. Direct reporting based solely on this
       client-side check is unreliable and has been REMOVED.
     - The definitive detection of teleportation/speed hacks is performed SERVER-SIDE
-      in `server/modules/detections.lua` by analyzing the distance traveled between
+      in `server/modules/sv_detections.lua` by analyzing the distance traveled between
       periodic position updates received from the client (`NEXUSGUARD_POSITION_UPDATE` event).
       Server-side checks may also incorporate raycasting for noclip detection.
     - This client-side check remains primarily for potential local logging (currently commented out)

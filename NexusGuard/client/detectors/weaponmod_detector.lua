@@ -13,7 +13,7 @@
     - Direct reporting (`NexusGuard:ReportCheat`) based on these checks has been REMOVED.
     - The primary validation should occur server-side. This detector *should* trigger the
       `NEXUSGUARD_WEAPON_CHECK` event (defined in `shared/event_registry.lua`) periodically,
-      sending the current weapon hash and clip size to the server (`server/modules/detections.lua`)
+      sending the current weapon hash and clip size to the server (`server/modules/sv_detections.lua`)
       for comparison against configured, authoritative values (`Config.WeaponBaseClipSize`).
       (Currently, this detector doesn't explicitly trigger that event; `client_main.lua` might need adjustment
        or this detector needs modification to send the event instead of just performing local checks).

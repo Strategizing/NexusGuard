@@ -1,5 +1,5 @@
 --[[
-    NexusGuard Server Security Module (server/sv_security.lua)
+    NexusGuard Server Security Module (server/modules/sv_security.lua)
 
     Purpose:
     - Provides functions for generating and validating security tokens used in client-server communication.

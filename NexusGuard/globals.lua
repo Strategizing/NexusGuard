@@ -23,7 +23,6 @@
 -- - oxmysql: Required for database operations
 -- - screenshot-basic: Required for screenshot functionality
 
--- Load the Utils module first (needed for logging)
 local Utils = require('server/sv_utils')
 
 -- Local alias for logging function from the Utils module
@@ -33,8 +32,7 @@ if not Log then
     Log = function(msg, level) print(msg) end -- Basic fallback
 end
 
--- Load the Core module which will handle all other modules
-local Core = require('server/sv_core')
+local Core = require('server/modules/sv_core')
 
 -- Main container table for all server-side NexusGuard modules and shared data
 local NexusGuardServer = {
@@ -44,7 +42,9 @@ local NexusGuardServer = {
     Core = Core               -- Assign Core module
 }
 
--- Initialize the Core module with Config and Utils
+-- Expose API table early so modules loaded during Core initialization can access it
+_G.NexusGuardServer = NexusGuardServer
+
 if not Core.Initialize(NexusGuardServer.Config, Utils) then
     Log("^1[NexusGuard] CRITICAL: Failed to initialize Core module. NexusGuard may not function correctly.^7", 1)
 end

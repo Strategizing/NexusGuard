@@ -193,7 +193,7 @@ end
 
 ### 5. Server-Side Validation
 
-For robust detection, implement server-side validation in `server/modules/detections.lua`:
+For robust detection, implement server-side validation in `server/modules/sv_detections.lua`:
 
 ```lua
 -- In the Process function, add a new elseif branch
