@@ -132,8 +132,20 @@ test("Clear cache", function()
     assert(moduleA1 ~= moduleA2, "Different module instances should be returned after clearing cache")
 end)
 
+-- Test: Load module by short name
+test("Load module by short name", function()
+    local utilsModule = ModuleLoader.LoadByName('utils')
+    assert(utilsModule ~= nil, "Utils module should be loaded by short name")
+end)
+
+-- Test: Handle unknown short module name
+test("Handle unknown short module name", function()
+    local unknown = ModuleLoader.LoadByName('unknownModule')
+    assert(unknown == nil or next(unknown) == nil, "Unknown module should return nil or an empty table")
+end)
+
 -- Print test summary
-print(string.format("\nTest Summary: %d passed, %d failed, %d total", 
+print(string.format("\nTest Summary: %d passed, %d failed, %d total",
     tests.passed, tests.failed, tests.total))
 
 -- Restore the original require function
