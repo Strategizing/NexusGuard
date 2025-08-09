@@ -171,12 +171,12 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     ]]
     function NexusGuardInstance:SafeDetect(detectionFn, detectionName)
         -- pcall (protected call) executes the function `detectionFn`.
-        -- If `detectionFn` runs without errors, `success` is true, and `err` is the return value(s).
-        -- If `detectionFn` errors, `success` is false, and `err` is the error message.
-        local success, err = pcall(detectionFn)
+        -- If `detectionFn` runs without errors, `success` is true, and `result` is the return value(s).
+        -- If `detectionFn` errors, `success` is false, and `result` is the error message.
+        local success, result = pcall(detectionFn)
 
         if not success then
-            print(("^1[NexusGuard] Error executing detector '%s': %s^7"):format(detectionName, tostring(err)))
+            print(("^1[NexusGuard] Error executing detector '%s': %s^7"):format(detectionName, tostring(result)))
 
             -- Basic error throttling: Report persistent errors to the server.
             if not self.errors then self.errors = {} end -- Initialize error tracking table if needed
@@ -193,7 +193,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                 if self.securityToken then -- Ensure we have a token to send
                     if EventRegistry then
                         -- Send the error details along with the security token for validation server-side.
-                        EventRegistry:TriggerServerEvent('SYSTEM_ERROR', detectionName, tostring(err), self.securityToken)
+                        EventRegistry:TriggerServerEvent('SYSTEM_ERROR', detectionName, tostring(result), self.securityToken)
                     else
                         print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot report client error to server.^7")
                     end
@@ -210,6 +210,8 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                  errorInfo.firstSeen = GetGameTimer()
             end
         end
+
+        return success and result or nil
     end
 
     --[[

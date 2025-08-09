@@ -228,6 +228,14 @@ Config.Client = {
     PositionUpdateInterval = 5000 -- Interval in milliseconds for sending position/health updates to the server. Lower values increase accuracy but also network traffic.
 }
 
+-- Adaptive Interval Settings
+-- Controls how detector loop intervals adjust based on player suspicion scores.
+Config.AdaptiveIntervals = {
+    baseInterval = 1000,       -- Base interval (ms) used when suspicion is zero
+    adjustmentFactor = 100,    -- Milliseconds removed from interval per suspicion point
+    minInterval = 500          -- Minimum interval (ms) to ensure low-risk players aren't checked too often
+}
+
 -- Detection Intervals (ms) - Control CPU usage
 Config.Intervals = {
     speedHack = 2000,

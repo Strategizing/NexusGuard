@@ -78,7 +78,7 @@ end
 ]]
 function Detector.Check()
     -- Ensure NexusGuard instance is available.
-    if not NexusGuard then return true end -- Skip check if core instance is missing.
+    if not NexusGuard then return 0 end -- Skip check if core instance is missing.
 
     -- List of common key combinations to check.
     -- Control IDs: https://docs.fivem.net/docs/game-references/controls/
@@ -120,7 +120,7 @@ function Detector.Check()
             end
             -- Return false to potentially trigger faster re-checks (adaptive timing in template).
             -- Consider returning true if reporting is sufficient and faster checks aren't needed.
-            return false
+            return 1
         end
     end
 
@@ -137,7 +137,7 @@ function Detector.Check()
     --    suspicious entries but is complex and potentially slow.
 
     -- If no suspicious keybinds were detected in this cycle.
-    return true
+    return 0
 end
 
 --[[

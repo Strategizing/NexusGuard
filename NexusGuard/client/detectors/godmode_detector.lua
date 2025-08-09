@@ -89,7 +89,7 @@ function Detector.Check()
     -- Ensure NexusGuard instance is available (should always be if initialized correctly).
     if not NexusGuard then
         print(("^1[NexusGuard:%s] Error: NexusGuard instance not available in Check function.^7"):format(DetectorName))
-        return true -- Return true to avoid rapid re-checks on error
+        return 0 -- Return 0 to avoid rapid re-checks on error
     end
 
     -- Access config thresholds via the stored NexusGuard instance.
@@ -105,7 +105,7 @@ function Detector.Check()
     local playerPed = PlayerPedId()
 
     -- Basic safety check.
-    if not DoesEntityExist(playerPed) then return true end -- Skip check if ped doesn't exist.
+    if not DoesEntityExist(playerPed) then return 0 end -- Skip check if ped doesn't exist.
 
     local currentHealth = GetEntityHealth(playerPed)
     local currentMaxHealth = GetPedMaxHealth(playerPed) -- Get the ped's actual max health native.
@@ -146,7 +146,7 @@ function Detector.Check()
     -- Update the detector's local state for the next check.
     Detector.state.lastHealth = currentHealth
 
-    return true -- Indicate check cycle completed (doesn't imply cheat/no cheat here).
+    return 0 -- Indicate check cycle completed (doesn't imply cheat/no cheat here).
 end
 
 --[[

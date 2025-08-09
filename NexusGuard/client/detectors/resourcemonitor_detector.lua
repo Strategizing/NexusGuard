@@ -90,12 +90,12 @@ function Detector.Check()
     -- Ensure NexusGuard instance and security token are available before sending data.
     if not NexusGuard or not NexusGuard.securityToken then
         -- Log(("^3[NexusGuard:%s] Skipping check, NexusGuard instance or security token not ready.^7"):format(DetectorName), 3) -- Reduce log spam
-        return true -- Return true to avoid rapid re-checks if token isn't ready yet.
+        return 0 -- Return 0 to avoid rapid re-checks if token isn't ready yet.
     end
     -- Ensure the EventRegistry reference is valid.
     if not LocalEventRegistry then
         print(("^1[NexusGuard:%s] CRITICAL: LocalEventRegistry not found in Check function. Cannot send resource list to server.^7"):format(DetectorName))
-        return true -- Avoid rapid re-checks on error.
+        return 0 -- Avoid rapid re-checks on error.
     end
 
     -- 1. Get List of Running Resources: Use FiveM natives.
@@ -118,7 +118,7 @@ function Detector.Check()
 
     -- This client-side check doesn't "detect" anything itself; it merely reports the current state.
     -- The actual detection (comparison against whitelist/blacklist) happens server-side.
-    return true -- Indicate check cycle completed successfully.
+    return 0 -- Indicate check cycle completed successfully.
 end
 
 --[[

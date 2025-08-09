@@ -97,7 +97,7 @@ end
 ]]
 function Detector.Check()
     -- Ensure NexusGuard instance is available.
-    if not NexusGuard then return true end -- Skip check if core instance is missing.
+    if not NexusGuard then return 0 end -- Skip check if core instance is missing.
 
     -- Access config thresholds via the stored NexusGuard instance.
     local cfg = NexusGuard.Config
@@ -109,7 +109,7 @@ function Detector.Check()
     local playerPed = PlayerPedId()
 
     -- Basic safety check.
-    if not DoesEntityExist(playerPed) then return true end
+    if not DoesEntityExist(playerPed) then return 0 end
 
     local currentPos = GetEntityCoords(playerPed)
     local lastPos = Detector.state.position
@@ -148,7 +148,7 @@ function Detector.Check()
     Detector.state.position = currentPos
     Detector.state.lastPositionUpdate = currentTime
 
-    return true -- Indicate check cycle completed.
+    return 0 -- Indicate check cycle completed.
 end
 
 --[[

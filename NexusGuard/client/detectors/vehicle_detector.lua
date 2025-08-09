@@ -151,14 +151,14 @@ end
 ]]
 function Detector.Check()
     -- Ensure NexusGuard instance is available.
-    if not NexusGuard then return true end -- Skip check if core instance is missing.
+    if not NexusGuard then return 0 end -- Skip check if core instance is missing.
 
     local playerPed = PlayerPedId()
-    if not DoesEntityExist(playerPed) then return true end
+    if not DoesEntityExist(playerPed) then return 0 end
 
     -- Only perform checks if the player is currently in a valid vehicle.
     local vehicle = GetVehiclePedIsIn(playerPed, false)
-    if vehicle == 0 or not DoesEntityExist(vehicle) then return true end
+    if vehicle == 0 or not DoesEntityExist(vehicle) then return 0 end
 
     local vehicleModel = GetEntityModel(vehicle)
     local vehicleClass = GetVehicleClass(vehicle)
@@ -183,7 +183,7 @@ function Detector.Check()
             samples = 1, -- Count checks performed
             lastCheck = GetGameTimer()
         }
-        return true -- Skip checks on the first sample.
+        return 0 -- Skip checks on the first sample.
     end
 
     local cache = VehicleCache[vehicleModel]
@@ -197,7 +197,7 @@ function Detector.Check()
     local requiredSamples = 5
     if cache.samples < requiredSamples then
         cache.samples = cache.samples + 1
-        return true -- Collect more data before checking.
+        return 0 -- Collect more data before checking.
     end
 
     -- 3. Perform Checks
@@ -252,7 +252,7 @@ function Detector.Check()
     -- Update last check time in cache (optional, might not be needed here).
     cache.lastCheck = GetGameTimer()
 
-    return true -- Indicate check cycle completed.
+    return 0 -- Indicate check cycle completed.
 end
 
 --[[

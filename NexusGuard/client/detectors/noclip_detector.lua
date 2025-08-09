@@ -82,7 +82,7 @@ function Detector.Check()
     -- Ensure NexusGuard instance is available.
     if not NexusGuard then
         -- print(("^1[NexusGuard:%s] Error: NexusGuard instance not available in Check function.^7"):format(DetectorName))
-        return true -- Skip check if core instance is missing
+        return 0 -- Skip check if core instance is missing
     end
 
     -- Access config thresholds via the stored NexusGuard instance.
@@ -93,23 +93,23 @@ function Detector.Check()
     local playerPed = PlayerPedId()
 
     -- 1. Exclude Legitimate States: Check various conditions where being off the ground is normal.
-    if not DoesEntityExist(playerPed) then return true end -- Ped doesn't exist
-    if GetVehiclePedIsIn(playerPed, false) ~= 0 then return true end -- In a vehicle
-    if IsEntityDead(playerPed) then return true end -- Dead
-    if IsPedInParachuteFreeFall(playerPed) then return true end -- Parachuting
-    if IsPedFalling(playerPed) then return true end -- Falling
-    if IsPedJumping(playerPed) then return true end -- Jumping
-    if IsPedClimbing(playerPed) then return true end -- Climbing
-    if IsPedVaulting(playerPed) then return true end -- Vaulting
-    if IsPedDiving(playerPed) then return true end -- Diving
-    if IsPedGettingUp(playerPed) then return true end -- Getting up from ragdoll
-    if IsPedRagdoll(playerPed) then return true end -- Ragdolling
-    if IsPedSwimming(playerPed) then return true end -- Swimming
+    if not DoesEntityExist(playerPed) then return 0 end -- Ped doesn't exist
+    if GetVehiclePedIsIn(playerPed, false) ~= 0 then return 0 end -- In a vehicle
+    if IsEntityDead(playerPed) then return 0 end -- Dead
+    if IsPedInParachuteFreeFall(playerPed) then return 0 end -- Parachuting
+    if IsPedFalling(playerPed) then return 0 end -- Falling
+    if IsPedJumping(playerPed) then return 0 end -- Jumping
+    if IsPedClimbing(playerPed) then return 0 end -- Climbing
+    if IsPedVaulting(playerPed) then return 0 end -- Vaulting
+    if IsPedDiving(playerPed) then return 0 end -- Diving
+    if IsPedGettingUp(playerPed) then return 0 end -- Getting up from ragdoll
+    if IsPedRagdoll(playerPed) then return 0 end -- Ragdolling
+    if IsPedSwimming(playerPed) then return 0 end -- Swimming
 
     local currentPos = GetEntityCoords(playerPed)
 
     -- Ensure position data is valid.
-    if not currentPos or not currentPos.x then return true end
+    if not currentPos or not currentPos.x then return 0 end
 
     -- 2. Get Ground Z Coordinate: Find the ground height below the player.
     -- The `false` argument means it won't consider water as ground.
@@ -154,7 +154,7 @@ function Detector.Check()
         -- Further checks could involve interior checks or distance from known map boundaries.
     end
 
-    return true -- Indicate check cycle completed.
+    return 0 -- Indicate check cycle completed.
 end
 
 --[[

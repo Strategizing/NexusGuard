@@ -81,7 +81,7 @@ function Detector.Check()
     -- Ensure NexusGuard instance is available.
     if not NexusGuard then
         -- print(("^1[NexusGuard:%s] Error: NexusGuard instance not available in Check function.^7"):format(DetectorName))
-        return true -- Skip check if core instance is missing
+        return 0 -- Skip check if core instance is missing
     end
 
     -- Access config thresholds via the stored NexusGuard instance.
@@ -94,7 +94,7 @@ function Detector.Check()
     local playerPed = PlayerPedId()
 
     -- Basic safety check.
-    if not DoesEntityExist(playerPed) then return true end
+    if not DoesEntityExist(playerPed) then return 0 end
 
     local vehicle = GetVehiclePedIsIn(playerPed, false)
 
@@ -133,7 +133,7 @@ function Detector.Check()
 
     -- No NexusGuard:ReportCheat calls are made from this detector anymore.
     -- Server-side position validation in `server/modules/detections.lua` handles actual speed hack detection.
-    return true -- Indicate check cycle completed.
+    return 0 -- Indicate check cycle completed.
 end
 
 --[[

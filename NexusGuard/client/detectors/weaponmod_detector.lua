@@ -86,7 +86,7 @@ end
 ]]
 function Detector.Check()
     -- Ensure NexusGuard instance is available.
-    if not NexusGuard then return true end -- Skip check if core instance is missing.
+    if not NexusGuard then return 0 end -- Skip check if core instance is missing.
 
     -- Access config thresholds via the stored NexusGuard instance.
     local cfg = NexusGuard.Config
@@ -98,7 +98,7 @@ function Detector.Check()
     local playerPed = PlayerPedId()
 
     -- Basic safety check.
-    if not DoesEntityExist(playerPed) then return true end
+    if not DoesEntityExist(playerPed) then return 0 end
 
     local currentWeaponHash = GetSelectedPedWeapon(playerPed)
 
@@ -130,7 +130,7 @@ function Detector.Check()
             -- Log(("[%s Detector] Initial stats for %u: Dmg=%.2f, Clip=%d"):format(
             --     DetectorName, currentWeaponHash, Detector.state.weaponStats[currentWeaponHash].baseDamage, Detector.state.weaponStats[currentWeaponHash].baseClipSize
             -- ), 4) -- Debug log
-            return true -- Don't perform checks on the very first sample.
+            return 0 -- Don't perform checks on the very first sample.
         end
 
         local storedStats = Detector.state.weaponStats[currentWeaponHash]
@@ -144,7 +144,7 @@ function Detector.Check()
             -- (This logic could be refined or removed depending on trust in initial values).
             -- if not defaultDamage and currentDamage ~= storedStats.baseDamage then storedStats.baseDamage = currentDamage end
             -- if not defaultClipSize and currentClipSize ~= storedStats.baseClipSize then storedStats.baseClipSize = currentClipSize end
-            return true -- Continue learning phase.
+            return 0 -- Continue learning phase.
         end
 
         -- 5. Perform Client-Side Checks (Primarily for logging/reference, NOT reporting)
@@ -183,7 +183,7 @@ function Detector.Check()
         end
     end
 
-    return true -- Indicate check cycle completed.
+    return 0 -- Indicate check cycle completed.
 end
 
 --[[

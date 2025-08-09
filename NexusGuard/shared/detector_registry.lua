@@ -60,7 +60,16 @@ end
 local function CreateDetectorThread(detectorInfo)
     local detectorName = detectorInfo.name
     local detector = detectorInfo.detector
-    local interval = detector.interval or 1000 -- Default interval if not specified by detector.
+
+    -- Adaptive interval configuration
+    local adaptiveCfg = _G.Config and _G.Config.AdaptiveIntervals or {}
+    local baseInterval = detector.interval or adaptiveCfg.baseInterval or 1000
+    local adjust = adaptiveCfg.adjustmentFactor or 100
+    local minInterval = adaptiveCfg.minInterval or 500
+
+    detector.baseInterval = baseInterval
+    detector.dynamicInterval = baseInterval
+    detector.suspicionScore = detector.suspicionScore or 0
 
     -- Ensure the main NexusGuard instance is available (needed for SafeDetect).
     if not DetectorRegistry.nexusGuardInstance then
@@ -83,22 +92,35 @@ local function CreateDetectorThread(detectorInfo)
 
     -- Create the Citizen thread for the detector's loop.
     local threadId = Citizen.CreateThread(function()
-        print(("^2[NexusGuard:%s]^7 Detector thread started (Interval: %dms).^7"):format(detectorName, interval))
+        print(("^2[NexusGuard:%s]^7 Detector thread started (Interval: %dms).^7"):format(detectorName, baseInterval))
         -- Loop continues as long as the detector's `active` flag is true.
         while detector.active do
             local currentTime = GetGameTimer()
 
-            -- Check if enough time has passed since the last execution based on the detector's interval.
-            if currentTime - (detector.lastCheck or 0) >= interval then
+            -- Check if enough time has passed since the last execution based on the detector's dynamic interval.
+            if currentTime - (detector.lastCheck or 0) >= detector.dynamicInterval then
                 -- Execute the detector's Check function safely using the wrapper from the main instance.
                 -- This prevents errors in one detector from crashing the whole script.
-                DetectorRegistry.nexusGuardInstance:SafeDetect(detector.Check, detectorName)
+                local score = DetectorRegistry.nexusGuardInstance:SafeDetect(detector.Check, detectorName)
+                if type(score) == "boolean" then
+                    score = score and 0 or 1
+                elseif type(score) ~= "number" then
+                    score = 0
+                end
+                detector.suspicionScore = (detector.suspicionScore or 0) + score
+                if score <= 0 then
+                    detector.suspicionScore = math.max(0, detector.suspicionScore - 1) -- simple decay
+                end
+
+                -- Adjust the interval based on current suspicion score.
+                detector.dynamicInterval = math.max(minInterval, baseInterval - detector.suspicionScore * adjust)
+
                 detector.lastCheck = currentTime -- Update last execution time.
             end
 
             -- Calculate wait time: Use a base minimum (e.g., 50ms) but don't exceed the interval or a reasonable max (e.g., 1000ms).
             -- This prevents tight loops for very short intervals while still being responsive.
-            local waitTime = math.max(50, math.min(interval, 1000))
+            local waitTime = math.max(50, math.min(detector.dynamicInterval, 1000))
             Citizen.Wait(waitTime)
         end
         -- Loop exited because detector.active became false.
