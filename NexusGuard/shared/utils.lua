@@ -41,35 +41,56 @@ Utils.logLevels = {
 -- Current log level (can be changed at runtime)
 Utils.currentLogLevel = Utils.logLevels.INFO
 
--- Get the NexusGuard API (server or client)
+-- Get the NexusGuard API (server or client) with auto-reacquisition
 function Utils.GetNexusGuardAPI()
-    if Utils.nexusGuardAPI then
+    -- If we already have a real API cached, return it immediately
+    if Utils.nexusGuardAPI and not Utils.nexusGuardAPIDummy then
         return Utils.nexusGuardAPI
     end
 
+    -- Try to acquire or re-acquire the API
+    local api
     if Utils.isServer then
         -- Server-side: Try to get the API from exports
-        local success, api = pcall(function() return exports['NexusGuard']:GetNexusGuardServerAPI() end)
-        if success and api then
-            Utils.nexusGuardAPI = api
-            return api
+        local success, result = pcall(function()
+            return exports['NexusGuard']:GetNexusGuardServerAPI()
+        end)
+        if success and result then
+            api = result
         end
     else
         -- Client-side: API should be available from _G.NexusGuard
         if _G.NexusGuard then
-            Utils.nexusGuardAPI = _G.NexusGuard
-            return _G.NexusGuard
+            api = _G.NexusGuard
         end
     end
 
-    -- Create a dummy API if not found
-    local dummyAPI = {
-        Config = { Thresholds = {}, SeverityScores = {} },
-        Utils = { Log = function(...) print("[NexusGuard Fallback Log]", ...) end }
-    }
+    -- If a real API was found, cache it and clear the dummy flag
+    if api then
+        Utils.nexusGuardAPI = api
+        Utils.nexusGuardAPIDummy = false
+        return api
+    end
 
-    Utils.nexusGuardAPI = dummyAPI
-    return dummyAPI
+    -- Create and cache a dummy API if we don't already have one
+    if not Utils.nexusGuardAPIDummy then
+        Utils.nexusGuardAPI = {
+            Config = { Thresholds = {}, SeverityScores = {} },
+            Utils = {
+                Log = function(...) print("[NexusGuard Fallback Log]", ...) end
+            }
+        }
+        Utils.nexusGuardAPIDummy = true
+    end
+
+    return Utils.nexusGuardAPI
+end
+
+-- Force a refresh of the cached NexusGuard API
+function Utils.RefreshNexusGuardAPI()
+    Utils.nexusGuardAPI = nil
+    Utils.nexusGuardAPIDummy = nil
+    return Utils.GetNexusGuardAPI()
 end
 
 -- Enhanced logging function with levels and formatting
