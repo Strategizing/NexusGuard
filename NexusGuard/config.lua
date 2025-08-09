@@ -38,7 +38,7 @@ Config.SecuritySecret = "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" -- CRITICAL:
 Config.Security = {
     TokenValidityWindow = 60, -- Seconds a token is considered valid after generation (Default: 60)
     TokenCacheCleanupIntervalMs = 60000, -- Milliseconds between cleaning up expired tokens from the anti-replay cache (Default: 60000 = 1 minute)
-    -- TODO: Implement replay prevention by tracking used token signatures within the validity window.
+    -- Anti-replay protection: token signatures are cached to prevent reuse within the validity window.
 }
 
 -- [[ DEPRECATED / PLACEHOLDER SECTIONS REMOVED ]]

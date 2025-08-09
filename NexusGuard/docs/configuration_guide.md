@@ -26,11 +26,17 @@ Config.KickMessage = "You have been kicked for suspicious activity."
 
 -- Security Settings
 Config.SecuritySecret = "CHANGE_THIS_TO_A_LONG_RANDOM_STRING" -- CRITICAL: Change this!
+Config.Security = {
+    TokenValidityWindow = 60, -- Seconds a token remains valid
+    TokenCacheCleanupIntervalMs = 60000 -- Anti-replay cache cleanup interval (ms)
+}
 
 -- Permission Settings
 Config.PermissionsFramework = "ace" -- Options: "ace", "esx", "qbcore", "custom"
 Config.AdminGroups = {"admin", "superadmin"} -- Admin group names in your framework
 ```
+
+Tokens include built-in anti-replay protection. `TokenValidityWindow` sets how long a token is valid, and `TokenCacheCleanupIntervalMs` controls cleanup of cached signatures used to prevent replays.
 
 ### Enabling/Disabling Detectors
 
