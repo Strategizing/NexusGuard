@@ -183,7 +183,7 @@ function Detector.Check()
         end
     end
 
-    return true -- Indicate check cycle completed.
+    return 0 -- Suspicion score (0 = no suspicion)
 end
 
 --[[

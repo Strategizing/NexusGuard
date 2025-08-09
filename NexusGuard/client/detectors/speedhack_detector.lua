@@ -133,7 +133,7 @@ function Detector.Check()
 
     -- No NexusGuard:ReportCheat calls are made from this detector anymore.
     -- Server-side position validation in `server/modules/detections.lua` handles actual speed hack detection.
-    return true -- Indicate check cycle completed.
+    return 0 -- Suspicion score (0 = no suspicion)
 end
 
 --[[
