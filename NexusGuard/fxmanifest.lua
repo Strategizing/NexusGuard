@@ -13,6 +13,7 @@ shared_scripts {
 }
 
 client_scripts {
+    'client/event_proxy.lua',
     'client/client_main.lua',
     'client/detectors/*.lua'
 }
@@ -26,6 +27,7 @@ server_scripts {
     'server/sv_core.lua',            -- Load core module (handles module loading)
     'server/sv_permissions.lua',
     'server/sv_security.lua',
+    'server/sv_event_proxy.lua',
     'server/sv_session.lua',        -- Load session management module
     'server/sv_bans.lua',
     'server/sv_database.lua',       -- Load database module
