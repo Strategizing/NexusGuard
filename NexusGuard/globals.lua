@@ -55,6 +55,23 @@ for moduleName, moduleRef in pairs(Core.modules) do
     Log(("^2[NexusGuard]^7 Module '%s' assigned to API."):format(moduleName), 3)
 end
 
+-- Extend Security module with per-player challenge token storage
+if NexusGuardServer.Security and not NexusGuardServer.Security.challengeTokens then
+    NexusGuardServer.Security.challengeTokens = {}
+    local originalGenerateToken = NexusGuardServer.Security.GenerateToken
+    -- Wrap existing token generator to store token and timestamp per player
+    NexusGuardServer.Security.GenerateToken = function(playerId)
+        local tokenData = originalGenerateToken and originalGenerateToken(playerId)
+        if tokenData then
+            NexusGuardServer.Security.challengeTokens[playerId] = {
+                token = tokenData.signature,
+                timestamp = tokenData.timestamp
+            }
+        end
+        return tokenData
+    end
+end
+
 -- #############################################################################
 -- ## API Functions ##
 -- #############################################################################

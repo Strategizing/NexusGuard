@@ -35,6 +35,8 @@ local Security = {
     -- Key: Token signature (string)
     -- Value: Expiry timestamp (number, os.time() format)
     recentTokens = {},
+    -- Tracks used timestamps per player to prevent rapid reuse
+    usedTimestamps = {},
     tokenCacheCleanupInterval = 60000, -- Default cleanup interval (ms), overridden by config
     lastTokenCacheCleanup = 0,         -- Timestamp (GetGameTimer) of the last cleanup.
     maxTimeDifference = 60,            -- Default validity window (seconds), overridden by config
@@ -249,7 +251,22 @@ function Security.ValidateToken(playerId, tokenData)
         return false -- Signatures do not match.
     end
 
-    -- 3. Anti-Replay Check: Prevent the same token from being used multiple times.
+    -- 3. Timestamp reuse check per player
+    Security.usedTimestamps[playerId] = Security.usedTimestamps[playerId] or {}
+    for ts, _ in pairs(Security.usedTimestamps[playerId]) do
+        if currentTime - ts > Security.maxTimeDifference then
+            Security.usedTimestamps[playerId][ts] = nil
+        end
+    end
+    if Security.usedTimestamps[playerId][receivedTimestamp] then
+        Log(("^1Security Warning: Token timestamp reuse detected for player %d. Timestamp: %d^7"):format(playerId, receivedTimestamp), 1)
+        Security.stats.replayAttempts = Security.stats.replayAttempts + 1
+        Security.stats.tokensFailed = Security.stats.tokensFailed + 1
+        return false
+    end
+    Security.usedTimestamps[playerId][receivedTimestamp] = true
+
+    -- 4. Anti-Replay Check: Prevent the same token signature from being used multiple times.
     local cacheKey = receivedSignature -- Use the unique signature as the key in the cache.
     local expiryTime = Security.recentTokens[cacheKey] -- Check if this signature exists in the cache.
 
