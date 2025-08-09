@@ -101,12 +101,12 @@ local Utils = ModuleLoader.Load('shared/utils')
 Utils.Log("Player connected: %s", Utils.logLevels.INFO, playerName)
 ```
 
-#### `Utils.TableSize(table)`
+#### `Utils.TableSize(tbl)`
 
-Returns the number of elements in a table.
+Counts the number of key/value pairs in a table using `pairs`.
 
 **Parameters:**
-- `table` (table): The table to count elements in
+- `tbl` (table): The table to count elements in
 
 **Returns:**
 - (number): The number of elements in the table

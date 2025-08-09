@@ -244,6 +244,20 @@ function Utils.Hash(data, algorithm)
     return tostring(hash)
 end
 
+-- Count the number of key/value pairs in a table
+function Utils.TableSize(tbl)
+    if type(tbl) ~= "table" then
+        return 0
+    end
+
+    local count = 0
+    for _ in pairs(tbl) do
+        count = count + 1
+    end
+
+    return count
+end
+
 -- Get connected players with caching
 function Utils.GetConnectedPlayers()
     -- Check cache first
