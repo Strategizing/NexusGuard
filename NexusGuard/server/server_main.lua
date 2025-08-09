@@ -564,7 +564,28 @@ function RegisterNexusGuardServerEvents()
         if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidatePositionUpdate then
             NexusGuardServer.Detections.ValidatePositionUpdate(source, currentPos, clientTimestamp, session)
         else
-            Log(("^1[NexusGuard] CRITICAL: Detections.ValidatePositionUpdate function not found in API! Cannot validate position for %s (ID: %d)^7"):format(playerName, source), 1)
+            Log(("^1[NexusGuard] CRITICAL: Detections.ValidatePositionUpdate function not found in API! Falling back to basic checks for %s (ID: %d).^7"):format(playerName, source), 1)
+
+            local thresholds = NexusGuardServer.Config.Thresholds or {}
+            local speedLimit = thresholds.serverSideSpeedThreshold or NexusGuardServer.Config.serverSideSpeedThreshold or 50.0
+
+            if session.metrics.lastServerPosition and session.metrics.lastServerPositionTimestamp then
+                local lastPos = session.metrics.lastServerPosition
+                local timeDiff = GetGameTimer() - session.metrics.lastServerPositionTimestamp
+                if timeDiff > 0 then
+                    local distance = #(currentPos - lastPos)
+                    local speed = distance / (timeDiff / 1000.0)
+                    if speed > speedLimit then
+                        Log(("^1[NexusGuard] Server-side speed check exceeded for %s (ID: %d): %.2f m/s > %.2f^7"):format(playerName, source, speed, speedLimit), 1)
+                        if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+                            NexusGuardServer.Detections.Process(source, "ServerSpeedCheck", {calculatedSpeed = speed}, session)
+                        end
+                    end
+                end
+            end
+
+            session.metrics.lastServerPosition = currentPos
+            session.metrics.lastServerPositionTimestamp = GetGameTimer()
         end
     end)
 
@@ -598,7 +619,35 @@ function RegisterNexusGuardServerEvents()
         if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidateHealthUpdate then
             NexusGuardServer.Detections.ValidateHealthUpdate(source, currentHealth, currentArmor, clientTimestamp, session)
         else
-             Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Cannot validate health/armor for %s (ID: %d)^7"):format(playerName, source), 1)
+            Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Falling back to basic checks for %s (ID: %d).^7"):format(playerName, source), 1)
+
+            local thresholds = NexusGuardServer.Config.Thresholds or {}
+            local regenLimit = thresholds.serverSideRegenThreshold or NexusGuardServer.Config.serverSideRegenThreshold or 3.0
+            local armorLimit = thresholds.serverSideArmorThreshold or NexusGuardServer.Config.serverSideArmorThreshold or 105.0
+
+            if session.metrics.lastHealth and session.metrics.lastHealthTimestamp then
+                local diff = currentHealth - session.metrics.lastHealth
+                local timeDiff = (GetGameTimer() - session.metrics.lastHealthTimestamp) / 1000.0
+                if timeDiff > 0 then
+                    local regenRate = diff / timeDiff
+                    if regenRate > regenLimit then
+                        Log(("^1[NexusGuard] Server-side regen check exceeded for %s (ID: %d): %.2f HP/s > %.2f^7"):format(playerName, source, regenRate, regenLimit), 1)
+                        if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+                            NexusGuardServer.Detections.Process(source, "ServerHealthRegenCheck", {regen = regenRate}, session)
+                        end
+                    end
+                end
+            end
+
+            if currentArmor > armorLimit then
+                Log(("^1[NexusGuard] Server-side armor check exceeded for %s (ID: %d): %.2f > %.2f^7"):format(playerName, source, currentArmor, armorLimit), 1)
+                if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+                    NexusGuardServer.Detections.Process(source, "ServerArmorCheck", {armor = currentArmor}, session)
+                end
+            end
+
+            session.metrics.lastHealth = currentHealth
+            session.metrics.lastHealthTimestamp = GetGameTimer()
         end
     end)
 

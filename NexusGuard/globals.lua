@@ -23,15 +23,19 @@
 -- - oxmysql: Required for database operations
 -- - screenshot-basic: Required for screenshot functionality
 
--- Load the Utils module first (needed for logging)
 local Utils = require('server/sv_utils')
 
--- Local alias for logging function from the Utils module
-local Log = Utils.Log
-if not Log then
-    print("^1[NexusGuard] CRITICAL: Logging function (Utils.Log) not found after requiring sv_utils.lua.^7")
-    Log = function(msg, level) print(msg) end -- Basic fallback
+-- Logging function that respects Config.LogLevel.
+local function Log(message, level)
+    level = level or 2 -- Default to Info level
+    local configLogLevel = (_G.Config and _G.Config.LogLevel) or 2
+    if level <= configLogLevel then
+        print("[NexusGuard] " .. message)
+    end
 end
+
+-- Expose the log function through Utils for other modules.
+Utils.Log = Log
 
 -- Load the Core module which will handle all other modules
 local Core = require('server/sv_core')

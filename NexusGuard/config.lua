@@ -2,11 +2,18 @@ Config = {}
 
 -- General Settings
 Config.ServerName = "My Awesome FiveM Server" -- Your server name (You can change this later)
-Config.LogLevel = 1 -- Production default
 Config.EnableDiscordLogs = false -- DISABLED: Enable Discord webhook logs (Separate from LogLevel)
 Config.DiscordWebhook = "" -- Your Discord webhook URL (General logs if specific webhooks below aren't set)
 Config.BanMessage = "You have been banned for cheating. Appeal at: discord.gg/yourserver" -- Ban message
 Config.KickMessage = "You have been kicked for suspicious activity." -- Kick message
+
+-- Logging
+Config.LogLevel = 1 -- Production default
+
+-- Server-Side Threshold Settings
+Config.serverSideSpeedThreshold = 50.0 -- Max allowed speed in m/s based on server position checks (Approx 180 km/h). Tune carefully!
+Config.serverSideRegenThreshold = 3.0 -- Max allowed passive HP regen rate in HP/sec based on server health checks.
+Config.serverSideArmorThreshold = 105.0 -- Max allowed armor value based on server health checks (Allows slight buffer over 100).
 
 -- Permissions Framework Configuration
 -- Set this to match your server's permission system. Affects the IsPlayerAdmin check in globals.lua.
@@ -56,10 +63,10 @@ Config.Thresholds = {
     aiDecisionConfidenceThreshold = 0.75, -- AI confidence threshold for automated action
 
     -- Server-Side Validation Thresholds (Used by server checks, independent of client checks)
-    serverSideSpeedThreshold = 50.0, -- Max allowed speed in m/s based on server position checks (Approx 180 km/h). Tune carefully!
+    serverSideSpeedThreshold = Config.serverSideSpeedThreshold,
     minTimeDiffPositionCheck = 450, -- Minimum time in milliseconds between server-side position checks to calculate speed. Lower values are more sensitive but prone to false positives due to network jitter.
-    serverSideRegenThreshold = 3.0, -- Max allowed passive HP regen rate in HP/sec based on server health checks.
-    serverSideArmorThreshold = 105.0, -- Max allowed armor value based on server health checks (Allows slight buffer over 100).
+    serverSideRegenThreshold = Config.serverSideRegenThreshold,
+    serverSideArmorThreshold = Config.serverSideArmorThreshold,
 
     spawnGracePeriod = 5, -- Seconds to ignore speed checks after spawn
     teleportGracePeriod = 3, -- Seconds to ignore position jumps after resource start/teleport
