@@ -227,7 +227,7 @@ function OnPlayerConnecting(playerName, setKickReason, deferrals)
     Log(("^2[NexusGuard]^7 Player connection approved: %s (ID: %d, License: %s)^7"):format(playerName, source, license or "N/A"), 2)
     -- Finalize the deferral, allowing the player to join.
     deferrals.done()
-end)
+end
 
 --[[
     Player Disconnected Handler Function (OnPlayerDropped)
@@ -560,6 +560,37 @@ function RegisterNexusGuardServerEvents()
             end
         end
 
+        -- Basic server-side speed check using configured threshold
+        local lastPos = session.metrics.lastServerPosition
+        local lastTime = session.metrics.lastServerPositionTimestamp
+        local currentTime = GetGameTimer()
+        if lastPos and lastTime then
+            local timeDiff = currentTime - lastTime
+            local minDiff = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.minTimeDiffPositionCheck) or 450
+            if timeDiff >= minDiff then
+                local distance = #(currentPos - lastPos)
+                local speed = timeDiff > 0 and (distance / (timeDiff / 1000.0)) or 0.0
+                local speedThreshold = NexusGuardServer.Config.serverSideSpeedThreshold or 50.0
+                if speed > speedThreshold then
+                    if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+                        NexusGuardServer.Detections.Process(source, "ServerSpeedCheck", {
+                            speed = speed,
+                            threshold = speedThreshold,
+                            distance = distance,
+                            timeDiff = timeDiff,
+                            serverValidated = true
+                        }, session)
+                    else
+                        Log(("^1[NexusGuard] Speed %.2f m/s exceeded threshold %.2f for %s (ID: %d)^7"):format(speed, speedThreshold, playerName, source), 1)
+                    end
+                end
+            end
+        end
+
+        -- Update last known position/timestamp for next check
+        session.metrics.lastServerPosition = currentPos
+        session.metrics.lastServerPositionTimestamp = currentTime
+
         -- Call the validation function in the Detections module.
         if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidatePositionUpdate then
             NexusGuardServer.Detections.ValidatePositionUpdate(source, currentPos, clientTimestamp, session)
@@ -593,6 +624,50 @@ function RegisterNexusGuardServerEvents()
         if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
             NexusGuardServer.Session.UpdateActivity(source)
         end
+
+        -- Server-side armor cap check
+        local armorThreshold = NexusGuardServer.Config.serverSideArmorThreshold or 105.0
+        if currentArmor > armorThreshold then
+            if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+                NexusGuardServer.Detections.Process(source, "ServerArmorCheck", {
+                    currentArmor = currentArmor,
+                    threshold = armorThreshold,
+                    serverValidated = true
+                }, session)
+            else
+                Log(("^1[NexusGuard] Armor value %.1f exceeds threshold %.1f for %s (ID: %d)^7"):format(currentArmor, armorThreshold, playerName, source), 1)
+            end
+        end
+
+        -- Server-side health regeneration check
+        local lastHealth = session.metrics.lastServerHealth
+        local lastHealthTime = session.metrics.lastServerHealthTimestamp
+        local currentTime = GetGameTimer()
+        if lastHealth and lastHealthTime then
+            local timeDiff = currentTime - lastHealthTime
+            if timeDiff > 0 then
+                local regenRate = (currentHealth - lastHealth) / (timeDiff / 1000.0)
+                local regenThreshold = NexusGuardServer.Config.serverSideRegenThreshold or 3.0
+                if regenRate > regenThreshold then
+                    if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+                        NexusGuardServer.Detections.Process(source, "ServerHealthRegenCheck", {
+                            rate = regenRate,
+                            increase = currentHealth - lastHealth,
+                            threshold = regenThreshold,
+                            timeDiff = timeDiff,
+                            serverValidated = true
+                        }, session)
+                    else
+                        Log(("^1[NexusGuard] Health regen %.2f HP/s exceeded threshold %.2f for %s (ID: %d)^7"):format(regenRate, regenThreshold, playerName, source), 1)
+                    end
+                end
+            end
+        end
+
+        -- Update last known health/armor values
+        session.metrics.lastServerHealth = currentHealth
+        session.metrics.lastServerArmor = currentArmor
+        session.metrics.lastServerHealthTimestamp = currentTime
 
         -- Call the validation function in the Detections module.
         if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidateHealthUpdate then

@@ -26,11 +26,17 @@
 -- Load the Utils module first (needed for logging)
 local Utils = require('server/sv_utils')
 
--- Local alias for logging function from the Utils module
-local Log = Utils.Log
-if not Log then
-    print("^1[NexusGuard] CRITICAL: Logging function (Utils.Log) not found after requiring sv_utils.lua.^7")
-    Log = function(msg, level) print(msg) end -- Basic fallback
+-- Logging helper that respects Config.LogLevel even if Utils.Log is unavailable
+local function Log(message, level)
+    level = level or 2
+    local configLogLevel = (_G.Config and _G.Config.LogLevel) or 2
+    if level <= configLogLevel then
+        if Utils and Utils.Log then
+            Utils.Log(message, level)
+        else
+            print("[NexusGuard] " .. message)
+        end
+    end
 end
 
 -- Load the Core module which will handle all other modules
