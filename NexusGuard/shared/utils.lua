@@ -220,6 +220,20 @@ function Utils.SerializeTable(tbl, indent)
     return result .. string.rep("  ", indent) .. "}"
 end
 
+-- Count the number of entries in a table
+function Utils.TableSize(tbl)
+    if type(tbl) ~= "table" then
+        return 0
+    end
+
+    local count = 0
+    for _ in pairs(tbl) do
+        count = count + 1
+    end
+
+    return count
+end
+
 -- Secure hash function with fallbacks
 function Utils.Hash(data, algorithm)
     algorithm = algorithm or "sha256"
