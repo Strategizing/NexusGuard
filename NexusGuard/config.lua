@@ -57,7 +57,7 @@ Config.Thresholds = {
 
     -- Server-Side Validation Thresholds (Used by server checks, independent of client checks)
     serverSideSpeedThreshold = 50.0, -- Max allowed speed in m/s based on server position checks (Approx 180 km/h). Tune carefully!
-    minTimeDiffPositionCheck = 450, -- Minimum time in milliseconds between server-side position checks to calculate speed. Lower values are more sensitive but prone to false positives due to network jitter.
+    minTimeDiff = 450, -- Minimum time in milliseconds between server-side position checks to calculate speed (optional).
     serverSideRegenThreshold = 3.0, -- Max allowed passive HP regen rate in HP/sec based on server health checks.
     serverSideArmorThreshold = 105.0, -- Max allowed armor value based on server health checks (Allows slight buffer over 100).
 

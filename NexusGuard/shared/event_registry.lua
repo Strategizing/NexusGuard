@@ -59,6 +59,7 @@ EventRegistry.events = {
 
     -- Server-Side Validation Data (Client -> Server)
     -- Note: Keys kept similar to original for compatibility, but path indicates direction.
+    NEXUSGUARD_PLAYER_SPAWNED = "client:playerSpawned", -- Client -> Server: Player notifies spawn/respawn for grace period.
     NEXUSGUARD_POSITION_UPDATE = "client:positionUpdate", -- Client -> Server: Client sends its current position for server-side speed/teleport checks.
     NEXUSGUARD_HEALTH_UPDATE = "client:healthUpdate",   -- Client -> Server: Client sends its current health/armor for server-side god mode/armor checks.
     NEXUSGUARD_WEAPON_CHECK = "client:weaponCheck",    -- Client -> Server: Client sends current weapon/clip info for server-side validation.

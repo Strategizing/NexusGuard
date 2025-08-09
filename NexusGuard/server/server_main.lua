@@ -503,6 +503,38 @@ function RegisterNexusGuardServerEvents()
         -- Example: NexusGuardServer.Utils.NotifyAdmins(source, "ScreenshotTaken", {url = screenshotUrl}) -- If NotifyAdmins exists in API
     end)
 
+    -- Player Spawned Handler (Client -> Server)
+    -- Resets speed checks after player spawns or respawns.
+    EventRegistry:AddEventHandler('NEXUSGUARD_PLAYER_SPAWNED', function(tokenData)
+        local source = source -- Capture player source ID.
+        if not source or source <= 0 then return end
+        local playerName = GetPlayerName(source) or ("Unknown (" .. source .. ")")
+
+        -- CRITICAL: Validate the security token.
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
+            Log(("^1[NexusGuard] Invalid security token with spawn event from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
+                NexusGuardServer.Bans.Execute(source, 'Invalid security token with spawn event')
+            else
+                DropPlayer(source, "Anti-Cheat validation failed (Spawn Event Token).")
+            end
+            return
+        end
+
+        local session = NexusGuardServer.GetSession(source)
+        if not session or not session.metrics then return end
+
+        session.metrics.justSpawned = true
+
+        local grace = (NexusGuardServer.Config and NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.spawnGracePeriod or 5) * 1000
+        SetTimeout(grace, function()
+            local s = NexusGuardServer.GetSession(source)
+            if s and s.metrics then
+                s.metrics.justSpawned = false
+            end
+        end)
+    end)
+
     -- Position Update Handler (Client -> Server)
     -- Client sends periodic position updates. Validation is now handled by the Detections module.
     EventRegistry:AddEventHandler('NEXUSGUARD_POSITION_UPDATE', function(currentPos, clientTimestamp, tokenData)
@@ -527,6 +559,15 @@ function RegisterNexusGuardServerEvents()
             Log(("^1[NexusGuard] Invalid position data type received from %s (ID: %d). Kicking player.^7"):format(playerName, source), 1)
             DropPlayer(source, "Anti-Cheat validation failed (Invalid Position Data Type).")
             return
+        end
+
+        -- Estimate vertical velocity from Z-axis movement
+        if session.metrics.lastServerPosition and session.metrics.lastServerPositionTimestamp then
+            local currentServerTimestamp = GetGameTimer()
+            local timeDiff = currentServerTimestamp - session.metrics.lastServerPositionTimestamp
+            if timeDiff > 0 then
+                session.metrics.verticalVelocity = (currentPos.z - session.metrics.lastServerPosition.z) / (timeDiff / 1000.0)
+            end
         end
 
         -- Mark the session as active

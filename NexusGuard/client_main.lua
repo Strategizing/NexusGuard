@@ -756,6 +756,13 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         )
     end)
 
+    -- Notify server after player spawn/respawn to enable grace period.
+    AddEventHandler('playerSpawned', function()
+        if EventRegistry and NexusGuardInstance and NexusGuardInstance.securityToken then
+            EventRegistry:TriggerServerEvent('NEXUSGUARD_PLAYER_SPAWNED', NexusGuardInstance.securityToken)
+        end
+    end)
+
     --[[
         Resource Start Handler
         Initializes the NexusGuard core when this resource starts.

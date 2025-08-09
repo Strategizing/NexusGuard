@@ -70,7 +70,7 @@ Config.Thresholds = {
     weaponDamageMultiplier = 1.5, -- Maximum allowed damage multiplier
     
     -- Timing and Windows
-    minTimeDiffPositionCheck = 450, -- Minimum ms between position checks
+    minTimeDiff = 450, -- Minimum ms between position checks
     godModeDetectionWindow = 60, -- Time window for godmode pattern detection
     
     -- Noclip Detection

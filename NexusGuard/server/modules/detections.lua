@@ -817,7 +817,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
 
     -- Load relevant thresholds.
     local serverSpeedThreshold = Thresholds.serverSideSpeedThreshold or 50.0
-    local minTimeDiff = Thresholds.minTimeDiffPositionCheck or 450 -- Minimum time between checks (ms).
+    local minTimeDiff = Thresholds.minTimeDiff or Thresholds.minTimeDiffPositionCheck or 450 -- Minimum time between checks (ms).
     local teleportThreshold = Thresholds.teleportThreshold or 100.0 -- Distance in meters that's considered a teleport
     local noclipTolerance = Thresholds.noclipTolerance or 3.0 -- Extra distance tolerance for noclip check.
 
