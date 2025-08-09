@@ -77,6 +77,24 @@ function NexusGuardServer.ProcessDetection(playerId, detectionType, detectionDat
     return Core.ProcessDetection(playerId, detectionType, detectionData)
 end
 
+-- Store detection data in a normalized format through the Database module.
+NexusGuardServer.Detections = NexusGuardServer.Detections or {}
+function NexusGuardServer.Detections.Store(playerId, detectionType, detectionData)
+    if type(detectionData) ~= "table" then
+        detectionData = { value = detectionData, details = {}, clientValidated = false, serverValidated = false }
+    else
+        detectionData.value = detectionData.value
+        detectionData.details = detectionData.details or {}
+        detectionData.clientValidated = detectionData.clientValidated or false
+        detectionData.serverValidated = detectionData.serverValidated or false
+    end
+
+    if NexusGuardServer.Database and NexusGuardServer.Database.StoreDetection then
+        return NexusGuardServer.Database.StoreDetection(playerId, detectionType, detectionData)
+    end
+    return false
+end
+
 -- Get the current status of the NexusGuard system.
 function NexusGuardServer.GetStatus()
     return Core.GetStatus()
