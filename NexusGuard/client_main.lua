@@ -27,14 +27,11 @@ if not EventRegistry then
     -- Consider adding logic here to halt initialization if EventRegistry is crucial and missing.
 end
 
--- Detector Registry Module
 local DetectorRegistry = require('shared/detector_registry')
 if not DetectorRegistry then
     print("^1[NexusGuard] CRITICAL: Failed to load shared/detector_registry.lua. Detector management will fail.^7")
     -- Consider halting initialization if the registry is crucial.
 end
-
--- REMOVED _G.NexusGuard ASSIGNMENT
 
 -- Environment Check & Debug Compatibility
 -- Attempts to detect if running outside a standard FiveM client environment (e.g., for testing).
@@ -161,7 +158,6 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             -- 3. Add `Config.Detectors.mydetector = true` (or false) to config.lua.
         }
     }
-    -- _G.NexusGuard = NexusGuardInstance -- REMOVED: Avoid global assignment. Instance passed via Initialize.
 
     --[[
         Safe Detection Wrapper (Called by detector threads)
@@ -352,7 +348,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                     -- Call the detector's Initialize function if it exists.
                     -- Pass the core NexusGuard instance (self) and the EventRegistry for the detector to use.
                     if detectorModule.Initialize and type(detectorModule.Initialize) == "function" then
-                        local initSuccess, initErr = pcall(detectorModule.Initialize, self, EventRegistry)
+                        local initSuccess, initErr = pcall(detectorModule.Initialize, self)
                         if not initSuccess then
                             print(("^1[NexusGuard] Error initializing detector '%s': %s^7"):format(detectorName, tostring(initErr)))
                             -- Consider unregistering or marking as failed if init fails?

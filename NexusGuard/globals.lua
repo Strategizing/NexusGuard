@@ -82,6 +82,50 @@ function NexusGuardServer.GetStatus()
     return Core.GetStatus()
 end
 
+-- Check if a player has administrative privileges using the Permissions module.
+-- @param playerId (number): The player's server ID
+-- @return (boolean): True if the player is an admin, false otherwise
+function NexusGuardServer.IsPlayerAdmin(playerId)
+    if NexusGuardServer.Permissions and NexusGuardServer.Permissions.IsAdmin then
+        return NexusGuardServer.Permissions.IsAdmin(playerId)
+    end
+    return false
+end
+
+-- Ban a player using the Bans module and drop them from the server.
+-- @param playerId (number): The player's server ID
+-- @param reason (string): Reason for the ban
+-- @param durationSeconds (number|nil): Ban duration in seconds, nil for permanent
+-- @param admin (string|nil): Name of the admin issuing the ban
+-- @return (boolean): True if ban executed, false otherwise
+function NexusGuardServer.BanPlayer(playerId, reason, durationSeconds, admin)
+    if not (NexusGuardServer.Bans and NexusGuardServer.Bans.Store) then
+        Log("^1[NexusGuard] Bans module not available. Cannot ban player.^7", 1)
+        return false
+    end
+
+    local name = GetPlayerName and GetPlayerName(playerId) or "Unknown"
+    local license = GetPlayerIdentifierByType and GetPlayerIdentifierByType(playerId, 'license') or nil
+    local ip = GetPlayerEndpoint and GetPlayerEndpoint(playerId) or nil
+    local discord = GetPlayerIdentifierByType and GetPlayerIdentifierByType(playerId, 'discord') or nil
+
+    NexusGuardServer.Bans.Store({
+        name = name,
+        license = license,
+        ip = ip,
+        discord = discord,
+        reason = reason or "No reason provided",
+        admin = admin or "NexusGuard System",
+        durationSeconds = durationSeconds
+    })
+
+    if DropPlayer then
+        DropPlayer(playerId, reason or (NexusGuardServer.Config and NexusGuardServer.Config.BanMessage) or "Banned")
+    end
+
+    return true
+end
+
 -- #############################################################################
 -- ## Initialization and Exports ##
 -- #############################################################################
@@ -114,3 +158,6 @@ if _G.Citizen then
 else
     Log("^1[NexusGuard] CRITICAL: Citizen global not available. Database initialization may be delayed.^7", 1)
 end
+
+-- Return the API table when required as a module
+return NexusGuardServer

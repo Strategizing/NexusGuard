@@ -22,11 +22,10 @@
 local EventRegistry = require('shared/event_registry') -- Handles standardized network event names.
 
 -- NexusGuard Server API (from globals.lua)
--- This table provides access to functions and data from other server-side modules.
-local NexusGuardServer = exports['NexusGuard']:GetNexusGuardServerAPI()
+-- Require the API table directly instead of using globals or exports.
+local NexusGuardServer = require('globals')
 if not NexusGuardServer then
-    print("^1[NexusGuard] CRITICAL: Failed to get NexusGuardServer API from globals.lua. NexusGuard will not function correctly.^7")
-    -- Consider stopping the resource if the API is essential.
+    print("^1[NexusGuard] CRITICAL: Failed to load NexusGuardServer API from globals.lua. NexusGuard will not function correctly.^7")
     return
 end
 
