@@ -128,6 +128,9 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             warningIssued = false       -- Tracks if the initial local warning has been shown
         },
 
+        -- Suspicion scores per player (used for adaptive detector intervals)
+        suspicion = {},
+        
         -- Discord Rich Presence State (if enabled in config.lua)
         richPresence = {
             appId = nil,            -- Set from Config.Discord.RichPresence.AppId
@@ -162,6 +165,41 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         }
     }
     -- _G.NexusGuard = NexusGuardInstance -- REMOVED: Avoid global assignment. Instance passed via Initialize.
+
+    --[[
+        Suspicion Management
+        Stores a suspicion score for each player and provides helpers for
+        adjusting and retrieving the score. Scores are clamped to be
+        non-negative and can be used to adapt detector intervals.
+    ]]
+    function NexusGuardInstance:AdjustSuspicion(playerId, delta)
+        local current = self.suspicion[playerId] or 0
+        current = current + delta
+        if current < 0 then current = 0 end
+        self.suspicion[playerId] = current
+        return current
+    end
+
+    function NexusGuardInstance:GetSuspicion(playerId)
+        return self.suspicion[playerId] or 0
+    end
+
+    -- Computes an adaptive interval based on suspicion score and config values
+    function NexusGuardInstance:ComputeAdaptiveInterval(baseInterval, playerId)
+        local perf = self.Config and self.Config.Performance
+        local adaptive = perf and perf.adaptiveTiming or {}
+        local lowMult = adaptive.lowRiskMultiplier or 2.0
+        local highMult = adaptive.highRiskMultiplier or 0.5
+        local minDelay = adaptive.minimumDelay or 200
+        local maxScore = adaptive.maxSuspicion or 100
+        local score = self:GetSuspicion(playerId)
+        local normalized = math.min(score, maxScore) / maxScore
+        local multiplier = lowMult - (lowMult - highMult) * normalized
+        local base = baseInterval or adaptive.baseInterval or 1000
+        local interval = base * multiplier
+        if interval < minDelay then interval = minDelay end
+        return interval
+    end
 
     --[[
         Safe Detection Wrapper (Called by detector threads)
@@ -593,6 +631,11 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         if not self.initialized or not self.securityToken or type(self.securityToken) ~= "table" then
             print("^3[NexusGuard] ReportCheat skipped: Not initialized or no valid security token.^7")
             return
+        end
+
+        -- Increase suspicion score for the local player
+        if self.AdjustSuspicion then
+            self:AdjustSuspicion(PlayerId(), 10)
         end
 
         -- On the first detection for this client session, issue a local warning only.

@@ -118,9 +118,8 @@ function Detector.Check()
                 -- Report with details. Server-side validation is minimal for this type.
                 NexusGuard:ReportCheat(DetectorName, details)
             end
-            -- Return false to potentially trigger faster re-checks (adaptive timing in template).
-            -- Consider returning true if reporting is sufficient and faster checks aren't needed.
-            return false
+            -- Return a small suspicion score to trigger adaptive timing.
+            return 1
         end
     end
 
@@ -137,7 +136,7 @@ function Detector.Check()
     --    suspicious entries but is complex and potentially slow.
 
     -- If no suspicious keybinds were detected in this cycle.
-    return true
+    return 0
 end
 
 --[[

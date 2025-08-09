@@ -226,7 +226,7 @@ function Detector.Check()
                 DetectorName, details.speed, details.maxAllowed, details.vehicleName
             ), 1)
             NexusGuard:ReportCheat(DetectorName, details)
-            -- Consider returning false for adaptive timing if needed.
+            -- Consider returning a suspicion score for adaptive timing if needed.
         end
     end
 
@@ -245,14 +245,14 @@ function Detector.Check()
                 DetectorName, details.health, details.threshold
             ), 1)
             NexusGuard:ReportCheat(DetectorName, details)
-            -- Consider returning false for adaptive timing if needed.
+            -- Consider returning a suspicion score for adaptive timing if needed.
         end
     end
 
     -- Update last check time in cache (optional, might not be needed here).
     cache.lastCheck = GetGameTimer()
 
-    return true -- Indicate check cycle completed.
+    return 0 -- Suspicion score (0 = no suspicion)
 end
 
 --[[
