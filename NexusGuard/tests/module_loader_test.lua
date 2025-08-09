@@ -63,12 +63,12 @@ local tests = {
 -- Test function
 local function test(name, func)
     tests.total = tests.total + 1
-    local status, error = pcall(func)
+    local status, err = pcall(func)
     if status then
         print(string.format("✓ Test passed: %s", name))
         tests.passed = tests.passed + 1
     else
-        print(string.format("✗ Test failed: %s\n  Error: %s", name, error))
+        print(string.format("✗ Test failed: %s\n  Error: %s", name, err))
         tests.failed = tests.failed + 1
     end
 end
