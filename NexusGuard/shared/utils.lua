@@ -43,13 +43,17 @@ Utils.currentLogLevel = Utils.logLevels.INFO
 
 -- Get the NexusGuard API (server or client)
 function Utils.GetNexusGuardAPI()
-    if Utils.nexusGuardAPI then
+    -- If we already have the real API cached, return it
+    if Utils.nexusGuardAPI and not Utils.nexusGuardAPI.__isDummy then
         return Utils.nexusGuardAPI
     end
 
+    -- Try to acquire the real API depending on runtime
     if Utils.isServer then
         -- Server-side: Try to get the API from exports
-        local success, api = pcall(function() return exports['NexusGuard']:GetNexusGuardServerAPI() end)
+        local success, api = pcall(function()
+            return exports['NexusGuard']:GetNexusGuardServerAPI()
+        end)
         if success and api then
             Utils.nexusGuardAPI = api
             return api
@@ -62,14 +66,23 @@ function Utils.GetNexusGuardAPI()
         end
     end
 
-    -- Create a dummy API if not found
+    -- Create a dummy API if not found and mark it for future re-acquisition attempts
     local dummyAPI = {
         Config = { Thresholds = {}, SeverityScores = {} },
-        Utils = { Log = function(...) print("[NexusGuard Fallback Log]", ...) end }
+        Utils = {
+            Log = function(...) print("[NexusGuard Fallback Log]", ...) end
+        },
+        __isDummy = true
     }
 
     Utils.nexusGuardAPI = dummyAPI
     return dummyAPI
+end
+
+-- Force the NexusGuard API to be looked up again
+function Utils.RefreshNexusGuardAPI()
+    Utils.nexusGuardAPI = nil
+    return Utils.GetNexusGuardAPI()
 end
 
 -- Enhanced logging function with levels and formatting
