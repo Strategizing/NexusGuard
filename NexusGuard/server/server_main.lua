@@ -22,11 +22,10 @@
 local EventRegistry = require('shared/event_registry') -- Handles standardized network event names.
 
 -- NexusGuard Server API (from globals.lua)
--- This table provides access to functions and data from other server-side modules.
-local NexusGuardServer = exports['NexusGuard']:GetNexusGuardServerAPI()
-if not NexusGuardServer then
-    print("^1[NexusGuard] CRITICAL: Failed to get NexusGuardServer API from globals.lua. NexusGuard will not function correctly.^7")
-    -- Consider stopping the resource if the API is essential.
+-- Require globals.lua directly and obtain the API table.
+local ok, NexusGuardServer = pcall(require, 'globals')
+if not ok or not NexusGuardServer then
+    print("^1[NexusGuard] CRITICAL: Failed to load NexusGuardServer API from globals.lua. NexusGuard will not function correctly.^7")
     return
 end
 
@@ -115,10 +114,9 @@ AddEventHandler('onResourceStart', function(resourceName)
     end
 
     -- Ensure the Config table loaded from config.lua is accessible via the API table.
-    -- _G.Config should have been loaded by `shared_scripts` in fxmanifest.lua.
-    NexusGuardServer.Config = _G.Config or {}
-    if not _G.Config then
-        Log("^1[NexusGuard] CRITICAL: Global Config table not found. Ensure config.lua is loaded correctly via shared_scripts.^7", 1)
+    if not NexusGuardServer.Config then
+        Log("^1[NexusGuard] CRITICAL: Config table not found. Ensure config.lua is loaded correctly via shared_scripts.^7", 1)
+        NexusGuardServer.Config = {}
     else
         Log("^2[NexusGuard]^7 Configuration table loaded and referenced in API.^7", 2)
     end
@@ -193,7 +191,7 @@ function OnPlayerConnecting(playerName, setKickReason, deferrals)
     end
 
     -- Check Admin Status using the Permissions module via API.
-    local isAdmin = (NexusGuardServer.Permissions and NexusGuardServer.Permissions.IsAdmin and NexusGuardServer.Permissions.IsAdmin(source)) or false
+    local isAdmin = (NexusGuardServer.IsPlayerAdmin and NexusGuardServer.IsPlayerAdmin(source)) or false
 
     -- Initialize Player Session using the Session module API.
     local session = NexusGuardServer.Session.GetSession(source)
@@ -307,8 +305,8 @@ function RegisterNexusGuardServerEvents()
             -- Handle invalid handshake attempt (missing or invalid clientHash).
              Log(("^1[NexusGuard]^7 Invalid or missing client hash received from %s (ID: %d) during token request. Kicking player.^7"):format(playerName, source), 1)
              -- Optionally ban for tampering.
-             if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
-                 NexusGuardServer.Bans.Execute(source, 'Modified client detected (Invalid Handshake)')
+             if NexusGuardServer.BanPlayer then
+                 NexusGuardServer.BanPlayer(source, 'Modified client detected (Invalid Handshake)')
              else
                  DropPlayer(source, "Anti-Cheat validation failed (Client Handshake Error).")
              end
@@ -325,8 +323,8 @@ function RegisterNexusGuardServerEvents()
         -- CRITICAL: Validate the security token received with the report.
         if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
             Log(("^1[NexusGuard] Invalid security token received with detection report from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
-            if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
-                NexusGuardServer.Bans.Execute(source, 'Invalid security token with detection report')
+            if NexusGuardServer.BanPlayer then
+                NexusGuardServer.BanPlayer(source, 'Invalid security token with detection report')
             else
                 DropPlayer(source, "Anti-Cheat validation failed (Invalid Detection Token).")
             end
@@ -359,8 +357,8 @@ function RegisterNexusGuardServerEvents()
         -- CRITICAL: Validate the security token.
         if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
             Log(("^1[NexusGuard] Invalid security token received with resource check from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
-            if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
-                NexusGuardServer.Bans.Execute(source, 'Invalid security token during resource check')
+            if NexusGuardServer.BanPlayer then
+                NexusGuardServer.BanPlayer(source, 'Invalid security token during resource check')
             else
                 DropPlayer(source, "Anti-Cheat validation failed (Resource Check Token).")
             end
@@ -437,7 +435,7 @@ function RegisterNexusGuardServerEvents()
                 -- Ban or kick based on config.
                 if rvConfig.banOnMismatch then
                     Log(("^1[NexusGuard] Banning player %s (ID: %d) due to resource mismatch.^7"):format(playerName, source), 1)
-                    if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, "Unauthorized resources detected (" .. checkMode .. ")") end
+                    if NexusGuardServer.BanPlayer then NexusGuardServer.BanPlayer(source, "Unauthorized resources detected (" .. checkMode .. ")") end
                 elseif rvConfig.kickOnMismatch then
                     Log(("^1[NexusGuard] Kicking player %s (ID: %d) due to resource mismatch.^7"):format(playerName, source), 1)
                     DropPlayer(source, "Kicked due to unauthorized resources.")
@@ -489,7 +487,7 @@ function RegisterNexusGuardServerEvents()
         -- CRITICAL: Validate the security token.
         if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
              Log(("^1[NexusGuard] Invalid security token received with screenshot confirmation from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
-             if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with screenshot confirmation') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Confirmation Token).") end
+             if NexusGuardServer.BanPlayer then NexusGuardServer.BanPlayer(source, 'Invalid security token with screenshot confirmation') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Confirmation Token).") end
             return
         end
 
@@ -513,7 +511,7 @@ function RegisterNexusGuardServerEvents()
         -- CRITICAL: Validate the security token.
         if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
             Log(("^1[NexusGuard] Invalid security token with position update from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
-            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with position update') else DropPlayer(source, "Anti-Cheat validation failed (Position Update Token).") end
+            if NexusGuardServer.BanPlayer then NexusGuardServer.BanPlayer(source, 'Invalid security token with position update') else DropPlayer(source, "Anti-Cheat validation failed (Position Update Token).") end
             return
         end
 
@@ -578,7 +576,7 @@ function RegisterNexusGuardServerEvents()
         -- CRITICAL: Validate the security token.
         if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
             Log(("^1[NexusGuard] Invalid security token with health update from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
-            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with health update') else DropPlayer(source, "Anti-Cheat validation failed (Health Update Token).") end
+            if NexusGuardServer.BanPlayer then NexusGuardServer.BanPlayer(source, 'Invalid security token with health update') else DropPlayer(source, "Anti-Cheat validation failed (Health Update Token).") end
             return
         end
 
@@ -613,7 +611,7 @@ function RegisterNexusGuardServerEvents()
         -- CRITICAL: Validate the security token.
         if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
             Log(("^1[NexusGuard] Invalid security token with weapon check from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
-            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with weapon check') else DropPlayer(source, "Anti-Cheat validation failed (Weapon Check Token).") end
+            if NexusGuardServer.BanPlayer then NexusGuardServer.BanPlayer(source, 'Invalid security token with weapon check') else DropPlayer(source, "Anti-Cheat validation failed (Weapon Check Token).") end
             return
         end
 
@@ -707,7 +705,7 @@ RegisterCommand('nexusguard_getresources', function(source, args, rawCommand)
     -- Disallow execution from server console.
     if source == 0 then print("[NexusGuard] This command must be run by an in-game player."); return end
     -- Check admin permissions using the Permissions module via API.
-    if not NexusGuardServer.Permissions or not NexusGuardServer.Permissions.IsAdmin or not NexusGuardServer.Permissions.IsAdmin(source) then
+    if not NexusGuardServer.IsPlayerAdmin or not NexusGuardServer.IsPlayerAdmin(source) then
         TriggerClientEvent('chat:addMessage', source, { color = {255, 0, 0}, multiline = true, args = {"NexusGuard", "You do not have permission to use this command."} })
         Log(("^1[NexusGuard] Permission denied for /nexusguard_getresources by player %s (ID: %d)^7"):format(GetPlayerName(source), source), 1)
         return
@@ -751,7 +749,7 @@ RegisterCommand('nexusguard_ban', function(sourceCmd, args, rawCommand)
     -- Disallow execution from server console.
     if adminSource == 0 then Log("The /nexusguard_ban command cannot be run from the server console.", 1); return end
     -- Check admin permissions.
-    if not NexusGuardServer.Permissions or not NexusGuardServer.Permissions.IsAdmin or not NexusGuardServer.Permissions.IsAdmin(adminSource) then
+    if not NexusGuardServer.IsPlayerAdmin or not NexusGuardServer.IsPlayerAdmin(adminSource) then
         TriggerClientEvent('chat:addMessage', adminSource, { color = {255, 0, 0}, multiline = true, args = {"NexusGuard", "Permission denied."} })
         return
     end
@@ -771,13 +769,13 @@ RegisterCommand('nexusguard_ban', function(sourceCmd, args, rawCommand)
     Log(("^1[NexusGuard] Admin %s (ID: %d) is banning player ID %d (Duration: %ds, Reason: %s)^7"):format(adminName, adminSource, targetId, duration, reason), 1)
 
     -- Execute the ban using the Bans module via API.
-    if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
-        NexusGuardServer.Bans.Execute(targetId, reason, adminName, duration)
+    if NexusGuardServer.BanPlayer then
+        NexusGuardServer.BanPlayer(targetId, reason, adminName, duration)
         -- Provide confirmation to the admin.
         TriggerClientEvent('chat:addMessage', adminSource, { color = {0, 255, 0}, multiline = true, args = {"NexusGuard", ("Ban command executed for player %s (ID: %d)."):format(GetPlayerName(targetId), targetId)} })
     else
         -- Handle error if ban function is missing from API.
-        Log("^1[NexusGuard] CRITICAL: Bans.Execute function not found in API! Cannot execute ban command.^7", 1)
+        Log("^1[NexusGuard] CRITICAL: BanPlayer function not found in API! Cannot execute ban command.^7", 1)
         TriggerClientEvent('chat:addMessage', adminSource, { color = {255, 0, 0}, multiline = true, args = {"NexusGuard", "Error: Ban function is unavailable."} })
     end
 end, true) -- Restricted command.
@@ -791,7 +789,7 @@ RegisterCommand('nexusguard_unban', function(sourceCmd, args, rawCommand)
     -- Disallow execution from server console.
     if adminSource == 0 then Log("The /nexusguard_unban command cannot be run from the server console.", 1); return end
     -- Check admin permissions.
-    if not NexusGuardServer.Permissions or not NexusGuardServer.Permissions.IsAdmin or not NexusGuardServer.Permissions.IsAdmin(adminSource) then
+    if not NexusGuardServer.IsPlayerAdmin or not NexusGuardServer.IsPlayerAdmin(adminSource) then
         TriggerClientEvent('chat:addMessage', adminSource, { color = {255, 0, 0}, multiline = true, args = {"NexusGuard", "Permission denied."} })
         return
     end

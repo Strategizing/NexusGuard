@@ -44,6 +44,9 @@ local NexusGuardServer = {
     Core = Core               -- Assign Core module
 }
 
+-- Expose API table early for modules loaded during Core initialization
+_G.NexusGuardServer = NexusGuardServer
+
 -- Initialize the Core module with Config and Utils
 if not Core.Initialize(NexusGuardServer.Config, Utils) then
     Log("^1[NexusGuard] CRITICAL: Failed to initialize Core module. NexusGuard may not function correctly.^7", 1)
@@ -53,6 +56,14 @@ end
 for moduleName, moduleRef in pairs(Core.modules) do
     NexusGuardServer[moduleName] = moduleRef
     Log(("^2[NexusGuard]^7 Module '%s' assigned to API."):format(moduleName), 3)
+end
+
+-- Load the Permissions module separately (not managed by Core)
+local permsOk, Permissions = pcall(require, 'server/sv_permissions')
+if permsOk and Permissions then
+    NexusGuardServer.Permissions = Permissions
+else
+    Log("^1[NexusGuard] Warning: Failed to load sv_permissions.lua. Admin checks will be unavailable.^7", 1)
 end
 
 -- #############################################################################
@@ -80,6 +91,23 @@ end
 -- Get the current status of the NexusGuard system.
 function NexusGuardServer.GetStatus()
     return Core.GetStatus()
+end
+
+-- Check if a player has administrative privileges
+function NexusGuardServer.IsPlayerAdmin(playerId)
+    if NexusGuardServer.Permissions and NexusGuardServer.Permissions.IsAdmin then
+        return NexusGuardServer.Permissions.IsAdmin(playerId)
+    end
+    return false
+end
+
+-- Ban a player using the Bans module
+function NexusGuardServer.BanPlayer(playerId, reason, adminName, durationSeconds)
+    if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
+        return NexusGuardServer.Bans.Execute(playerId, reason, adminName, durationSeconds)
+    end
+    Log("^1[NexusGuard] Bans.Execute not available. BanPlayer failed.^7", 1)
+    return false
 end
 
 -- #############################################################################
@@ -114,3 +142,6 @@ if _G.Citizen then
 else
     Log("^1[NexusGuard] CRITICAL: Citizen global not available. Database initialization may be delayed.^7", 1)
 end
+
+-- Return the API table for modules that require globals.lua directly
+return NexusGuardServer

@@ -34,7 +34,6 @@ if not DetectorRegistry then
     -- Consider halting initialization if the registry is crucial.
 end
 
--- REMOVED _G.NexusGuard ASSIGNMENT
 
 -- Environment Check & Debug Compatibility
 -- Attempts to detect if running outside a standard FiveM client environment (e.g., for testing).
@@ -161,7 +160,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             -- 3. Add `Config.Detectors.mydetector = true` (or false) to config.lua.
         }
     }
-    -- _G.NexusGuard = NexusGuardInstance -- REMOVED: Avoid global assignment. Instance passed via Initialize.
+    -- Instance is intentionally not assigned to a global; detectors receive it during Initialize.
 
     --[[
         Safe Detection Wrapper (Called by detector threads)
