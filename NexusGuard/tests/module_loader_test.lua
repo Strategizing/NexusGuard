@@ -13,16 +13,18 @@ local ModuleLoader = require('shared/module_loader')
 
 -- Mock modules for testing
 local mockModules = {
-    ['test/module_a'] = {
-        name = 'Module A',
-        getValue = function() return 'A' end
-    },
+    ['test/module_a'] = function()
+        return {
+            name = 'Module A',
+            getValue = function() return 'A' end
+        }
+    end,
     ['test/module_b'] = {
         name = 'Module B',
         getValue = function() return 'B' end,
-        getDependencyValue = function() 
+        getDependencyValue = function()
             local ModuleA = ModuleLoader.Load('test/module_a')
-            return ModuleA.getValue() 
+            return ModuleA.getValue()
         end
     },
     ['test/circular_a'] = {
@@ -36,19 +38,27 @@ local mockModules = {
     ['test/circular_b'] = {
         name = 'Circular B',
         getValue = function() return 'Circular B' end,
-        getDependencyValue = function() 
+        getDependencyValue = function()
             local CircularA = ModuleLoader.Load('test/circular_a')
-            return CircularA.getValue() 
+            return CircularA.getValue()
         end
     },
-    ['test/nonexistent'] = nil
+    ['test/function_module'] = function()
+        return function()
+            return 'Function Module'
+        end
+    end
 }
 
 -- Override the require function for testing
 local originalRequire = _G.require
 _G.require = function(modulePath)
-    if mockModules[modulePath] then
-        return mockModules[modulePath]
+    if mockModules[modulePath] ~= nil then
+        local mod = mockModules[modulePath]
+        if type(mod) == 'function' then
+            return mod()
+        end
+        return mod
     end
     return originalRequire(modulePath)
 end
@@ -112,9 +122,16 @@ end)
 test("Load an optional module", function()
     local nonexistentModule = ModuleLoader.Load('test/nonexistent', true)
     assert(nonexistentModule == nil, "Optional non-existent module should return nil without error")
-    
+
     local moduleA = ModuleLoader.Load('test/module_a', true)
     assert(moduleA ~= nil, "Optional existing module should be loaded")
+end)
+
+-- Test: Load a module that returns a function
+test("Load a module that returns a function", function()
+    local funcModule = ModuleLoader.Load('test/function_module')
+    assert(type(funcModule) == 'function', "Function module should load as a function")
+    assert(funcModule() == 'Function Module', "Function module should return correct value")
 end)
 
 -- Test: Module caching
