@@ -339,6 +339,11 @@ Config.Discord = {
         } -- Closing brace for Config.Discord.bot.notifications
         }, -- Closing brace for Config.Discord.bot
 
+        webhookWhitelist = {
+            -- Add full Discord webhook URLs that can be used with the specificWebhook parameter
+            -- "https://discord.com/api/webhooks/1234567890/abcdef",
+        },
+
         webhooks = {
             general = "", -- General anti-cheat logs (Can be the same as Config.DiscordWebhook)
             bans = "", -- Ban notifications (Can be the same as Config.DiscordWebhook)
