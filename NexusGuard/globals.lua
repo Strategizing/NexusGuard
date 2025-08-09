@@ -55,6 +55,70 @@ for moduleName, moduleRef in pairs(Core.modules) do
     Log(("^2[NexusGuard]^7 Module '%s' assigned to API."):format(moduleName), 3)
 end
 
+--[[
+    Per-player challenge token storage and helpers
+    Stores short-lived tokens issued to clients along with their timestamp.
+    These tokens are used for an additional validation step on sensitive
+    server events.
+]]
+NexusGuardServer.Security = NexusGuardServer.Security or {}
+NexusGuardServer.Security.challengeTokens = {}
+NexusGuardServer.Security.usedTimestamps = {}
+NexusGuardServer.Security.tokenValidityWindow = (NexusGuardServer.Config.Security
+    and NexusGuardServer.Config.Security.TokenValidityWindow) or 60
+
+-- Generates a challenge token for a specific player and stores it
+function NexusGuardServer.Security.GenerateChallengeToken(playerId)
+    if not playerId then return nil end
+    local timestamp = os.time()
+    local token
+    if lib and lib.crypto and lib.crypto.randomBytes then
+        token = lib.crypto.randomBytes(16)
+    else
+        token = tostring(math.random(100000, 999999)) .. tostring(math.random(100000, 999999))
+    end
+    NexusGuardServer.Security.challengeTokens[playerId] = {
+        token = token,
+        timestamp = timestamp
+    }
+    return token, timestamp
+end
+
+-- Validates a challenge token, ensuring timestamps are unique within the window
+function NexusGuardServer.Security.ValidateSecurityToken(playerId, token, timestamp)
+    if not playerId or not token or not timestamp then return false end
+
+    local record = NexusGuardServer.Security.challengeTokens[playerId]
+    if not record or record.token ~= token or record.timestamp ~= timestamp then
+        return false
+    end
+
+    local now = os.time()
+    local window = NexusGuardServer.Security.tokenValidityWindow
+
+    NexusGuardServer.Security.usedTimestamps[playerId] = NexusGuardServer.Security.usedTimestamps[playerId] or {}
+    local used = NexusGuardServer.Security.usedTimestamps[playerId]
+
+    -- purge expired timestamps
+    for ts in pairs(used) do
+        if now - ts > window then
+            used[ts] = nil
+        end
+    end
+
+    -- reject duplicate timestamps within window
+    if used[timestamp] then
+        return false
+    end
+
+    if now - timestamp > window then
+        return false
+    end
+
+    used[timestamp] = true
+    return true
+end
+
 -- #############################################################################
 -- ## API Functions ##
 -- #############################################################################

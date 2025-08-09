@@ -106,8 +106,8 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         Central management for client-side anti-cheat functionality.
     ]]
     local NexusGuardInstance = {
-        -- Security Token: Received from the server for validating client->server communication.
-        -- Expected format: { timestamp = ..., signature = ... }
+        -- Security Token: Short-lived challenge token issued by the server.
+        -- Expected format: { token = string, timestamp = number }
         securityToken = nil,
 
         -- Player state tracking (some basic state, more complex state often managed by specific detectors)
@@ -634,13 +634,13 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     if receiveTokenEvent then
         AddEventHandler(receiveTokenEvent, function(tokenData)
             -- Validate the structure of the received token data.
-            if not tokenData or type(tokenData) ~= "table" or not tokenData.timestamp or not tokenData.signature then
+            if not tokenData or type(tokenData) ~= "table" or not tokenData.timestamp or not tokenData.token then
                 print("^1[NexusGuard] Received invalid security token data structure from server. Handshake failed.^7")
                 NexusGuardInstance.securityToken = nil -- Ensure token is nil if invalid.
                 -- Consider requesting again or implementing further error handling.
                 return
             end
-            -- Store the received token table (containing timestamp and signature).
+            -- Store the received token table (containing the challenge token and timestamp).
             NexusGuardInstance.securityToken = tokenData
             print("^2[NexusGuard] Security token received and stored via event: " .. receiveTokenEvent .. "^7")
         end)
