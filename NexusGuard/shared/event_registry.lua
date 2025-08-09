@@ -40,6 +40,9 @@ EventRegistry.prefix = "nexusguard" -- e.g., results in "nexusguard:security:req
     Comments indicate the intended direction and purpose.
 ]]
 EventRegistry.events = {
+    -- Proxy Event Channel
+    PROXY_EVENT = "proxy:event", -- Client -> Server: Encoded event relay through controlled channel.
+
     -- Security Handshake (Client <-> Server)
     SECURITY_REQUEST_TOKEN = "security:requestToken", -- Client -> Server: Client requests a security token upon connection.
     SECURITY_RECEIVE_TOKEN = "security:receiveToken", -- Server -> Client: Server sends the generated security token data back to the client.

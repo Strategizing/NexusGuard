@@ -13,13 +13,13 @@
 
     Dependencies:
     - `NexusGuard` instance (for security token and config access).
-    - `EventRegistry` instance (for triggering the server event).
+    - `EventProxy` module (for triggering the server event securely).
 ]]
 
 local DetectorName = "resourceMonitor" -- Name used for logging and potentially intervals config.
 local ConfigKey = "resourceInjection" -- Key used in `Config.Detectors` to enable/disable this check.
 local NexusGuard = nil -- Local reference to the main NexusGuard client instance.
-local LocalEventRegistry = nil -- Local reference to the EventRegistry instance.
+local EventProxy = require('client/event_proxy') -- Controlled dispatch module
 
 -- Detector module table
 local Detector = {
@@ -42,12 +42,7 @@ function Detector.Initialize(nexusGuardInstance, eventRegistryInstance)
         print(("^1[NexusGuard:%s] CRITICAL: Failed to receive NexusGuard instance during initialization.^7"):format(DetectorName))
         return false
     end
-    if not eventRegistryInstance then
-        print(("^1[NexusGuard:%s] CRITICAL: Failed to receive EventRegistry instance during initialization.^7"):format(DetectorName))
-        return false -- Also fail if registry isn't passed.
-    end
     NexusGuard = nexusGuardInstance -- Store the core instance reference.
-    LocalEventRegistry = eventRegistryInstance -- Store the event registry reference.
 
     -- Read configuration (interval) via the NexusGuard instance.
     local cfg = NexusGuard.Config
@@ -92,9 +87,9 @@ function Detector.Check()
         -- Log(("^3[NexusGuard:%s] Skipping check, NexusGuard instance or security token not ready.^7"):format(DetectorName), 3) -- Reduce log spam
         return true -- Return true to avoid rapid re-checks if token isn't ready yet.
     end
-    -- Ensure the EventRegistry reference is valid.
-    if not LocalEventRegistry then
-        print(("^1[NexusGuard:%s] CRITICAL: LocalEventRegistry not found in Check function. Cannot send resource list to server.^7"):format(DetectorName))
+    -- Ensure EventProxy is available.
+    if not EventProxy then
+        print(("^1[NexusGuard:%s] CRITICAL: EventProxy not available. Cannot send resource list to server.^7"):format(DetectorName))
         return true -- Avoid rapid re-checks on error.
     end
 
@@ -114,7 +109,7 @@ function Detector.Check()
     -- 2. Send Resource List to Server: Trigger the `SYSTEM_RESOURCE_CHECK` event.
     -- Include the security token for server-side validation of the request itself.
     -- Log(("[%s Detector] Sending resource list (%d resources) to server for validation."):format(DetectorName, #runningResources), 4) -- Optional debug log
-    LocalEventRegistry:TriggerServerEvent('SYSTEM_RESOURCE_CHECK', runningResources, NexusGuard.securityToken)
+    EventProxy:TriggerServerEvent('SYSTEM_RESOURCE_CHECK', {runningResources}, NexusGuard.securityToken)
 
     -- This client-side check doesn't "detect" anything itself; it merely reports the current state.
     -- The actual detection (comparison against whitelist/blacklist) happens server-side.

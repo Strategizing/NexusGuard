@@ -13,6 +13,7 @@ shared_scripts {
 }
 
 client_scripts {
+    'client/event_proxy.lua',
     'client/client_main.lua',
     'client/detectors/*.lua'
 }
@@ -33,6 +34,7 @@ server_scripts {
     'server/sv_event_handlers.lua', -- Load event handlers module
     'server/modules/*.lua',         -- Load other modules (like detections)
     'globals.lua',                  -- Load globals to define API table (after modules are available)
+    'server/sv_event_proxy.lua',    -- Controlled event proxy
     'server/server_main.lua'        -- Load main server logic last
 }
 

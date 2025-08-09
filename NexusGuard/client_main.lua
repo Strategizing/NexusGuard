@@ -27,6 +27,8 @@ if not EventRegistry then
     -- Consider adding logic here to halt initialization if EventRegistry is crucial and missing.
 end
 
+local EventProxy = require('client/event_proxy') -- Controlled event dispatcher
+
 -- Detector Registry Module
 local DetectorRegistry = require('shared/detector_registry')
 if not DetectorRegistry then
@@ -193,7 +195,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
                 if self.securityToken then -- Ensure we have a token to send
                     if EventRegistry then
                         -- Send the error details along with the security token for validation server-side.
-                        EventRegistry:TriggerServerEvent('SYSTEM_ERROR', detectionName, tostring(err), self.securityToken)
+                        EventProxy:TriggerServerEvent('SYSTEM_ERROR', {detectionName, tostring(err)}, self.securityToken)
                     else
                         print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot report client error to server.^7")
                     end
@@ -616,7 +618,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             print(("^1[NexusGuard] Reporting Detection to Server - Type: %s, Details: %s^7"):format(tostring(detectionType), tostring(details)))
             if EventRegistry then
                 -- Send the detection type, details, and the security token to the server for verification and action.
-                EventRegistry:TriggerServerEvent('DETECTION_REPORT', detectionType, details, self.securityToken)
+                EventProxy:TriggerServerEvent('DETECTION_REPORT', {detectionType, details}, self.securityToken)
             else
                 -- EventRegistry is essential for server communication.
                 print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot report detection to server.^7")
