@@ -594,11 +594,77 @@ function RegisterNexusGuardServerEvents()
             NexusGuardServer.Session.UpdateActivity(source)
         end
 
-        -- Call the validation function in the Detections module.
-        if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidateHealthUpdate then
-            NexusGuardServer.Detections.ValidateHealthUpdate(source, currentHealth, currentArmor, clientTimestamp, session)
+        -- Pull thresholds from config
+        local thresholds = (NexusGuardServer.Config and NexusGuardServer.Config.Thresholds) or {}
+        local regenThreshold = thresholds.serverSideRegenThreshold or 3.0
+        local armorThreshold = thresholds.serverSideArmorThreshold or 105.0
+
+        -- Initialize per-session metrics
+        session.metrics.lastServerHealth = session.metrics.lastServerHealth or currentHealth
+        session.metrics.lastServerArmor = session.metrics.lastServerArmor or currentArmor
+        session.metrics.lastServerHealthTimestamp = session.metrics.lastServerHealthTimestamp or GetGameTimer()
+        session.metrics.healthRegenViolations = session.metrics.healthRegenViolations or 0
+        session.metrics.armorViolations = session.metrics.armorViolations or 0
+
+        -- Calculate differences
+        local now = GetGameTimer()
+        local timeDiff = now - session.metrics.lastServerHealthTimestamp
+        local healthIncrease = currentHealth - session.metrics.lastServerHealth
+        if healthIncrease > 0 and timeDiff > 0 then
+            local regenRate = healthIncrease / (timeDiff / 1000.0)
+            if regenRate > regenThreshold then
+                session.metrics.healthRegenViolations = session.metrics.healthRegenViolations + 1
+            else
+                session.metrics.healthRegenViolations = 0
+            end
         else
-             Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Cannot validate health/armor for %s (ID: %d)^7"):format(playerName, source), 1)
+            session.metrics.healthRegenViolations = 0
+        end
+
+        if currentArmor > armorThreshold then
+            session.metrics.armorViolations = session.metrics.armorViolations + 1
+        else
+            session.metrics.armorViolations = 0
+        end
+
+        -- Update last known values
+        session.metrics.lastServerHealth = currentHealth
+        session.metrics.lastServerArmor = currentArmor
+        session.metrics.lastServerHealthTimestamp = now
+
+        -- Only perform deeper validation after sustained anomalies
+        if (session.metrics.healthRegenViolations >= 2) or (session.metrics.armorViolations >= 2) then
+            if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidateHealthUpdate then
+                NexusGuardServer.Detections.ValidateHealthUpdate(source, currentHealth, currentArmor, clientTimestamp, session)
+            else
+                Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Cannot validate health/armor for %s (ID: %d)^7"):format(playerName, source), 1)
+            end
+            session.metrics.healthRegenViolations = 0
+            session.metrics.armorViolations = 0
+        end
+
+        -- Prepare metrics table for future damage correlation
+        session.metrics.damageEvents = session.metrics.damageEvents or {}
+    end)
+
+    -- Damage event tracking (Client -> Server)
+    -- Allows future correlation between reported damage and health updates
+    EventRegistry:AddEventHandler('NEXUSGUARD_DAMAGE_EVENT', function(damageAmount, weaponHash, attacker, tokenData)
+        local source = source
+        if not source or source <= 0 then return end
+
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
+            local name = GetPlayerName(source) or ("Unknown (" .. source .. ")")
+            Log(("^1[NexusGuard] Invalid security token with damage event from %s (ID: %d). Banning player.^7"):format(name, source), 1)
+            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with damage event') else DropPlayer(source, "Anti-Cheat validation failed (Damage Event Token).") end
+            return
+        end
+
+        local session = NexusGuardServer.GetSession(source)
+        if not session or not session.metrics then return end
+
+        if NexusGuardServer.Detections and NexusGuardServer.Detections.TrackDamageEvent then
+            NexusGuardServer.Detections.TrackDamageEvent(source, damageAmount, weaponHash, attacker)
         end
     end)
 
