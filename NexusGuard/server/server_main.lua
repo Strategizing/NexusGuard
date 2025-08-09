@@ -333,19 +333,11 @@ function RegisterNexusGuardServerEvents()
             return -- Stop processing if token is invalid.
         end
 
-        -- Retrieve the player's session data via API.
-        local session = NexusGuardServer.GetSession(source)
-        if not session then
-            Log(("^1[NexusGuard] CRITICAL: Failed to get API session for player %s (ID: %d) during DETECTION_REPORT. Aborting processing.^7"):format(playerName, source), 1)
-            return
-        end
-
-        -- Process the detection using the Detections module via API.
-        if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
-             -- Pass the player ID, detection details, and the full session object to the processing function.
-             NexusGuardServer.Detections.Process(source, detectionType, detectionData, session)
+        -- Process the detection using the high-level API which handles session retrieval and validation.
+        if NexusGuardServer.ProcessDetection then
+            NexusGuardServer.ProcessDetection(source, detectionType, detectionData)
         else
-             Log(("^1[NexusGuard] CRITICAL: Detections.Process function not found in API! Cannot process detection '%s' from %s (ID: %d)^7"):format(tostring(detectionType), playerName, source), 1)
+            Log(("^1[NexusGuard] CRITICAL: ProcessDetection function not found in API! Cannot process detection '%s' from %s (ID: %d)^7"):format(tostring(detectionType), playerName, source), 1)
         end
     end)
 

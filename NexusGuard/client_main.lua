@@ -595,6 +595,15 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             return
         end
 
+        -- Normalize the details into a consistent table structure
+        if type(details) ~= "table" then
+            details = { value = details }
+        else
+            details.value = details.value -- ensure key exists even if nil
+            details.details = details.details or {}
+        end
+        details.clientValidated = true
+
         -- On the first detection for this client session, issue a local warning only.
         if not self.flags.warningIssued then
             self.flags.suspiciousActivity = true -- Set a general suspicion flag (might be used elsewhere).

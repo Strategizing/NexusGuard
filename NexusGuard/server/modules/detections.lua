@@ -188,9 +188,14 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
             trustImpact = trustImpact,
             timestamp = os.time()
         })
-        -- Also store in database if configured
-        if NexusGuardServer.Database and NexusGuardServer.Database.StoreDetection then
-            NexusGuardServer.Database.StoreDetection(playerId, detectionType, details) -- Pass original details table
+        -- Also store in persistent history if configured
+        if NexusGuardServer.Detections and NexusGuardServer.Detections.Store then
+            NexusGuardServer.Detections.Store(playerId, detectionType, {
+                reason = reason,
+                details = details,
+                serverValidated = validatedData.serverValidated,
+                clientValidated = validatedData.clientValidated
+            })
         end
     else
          Log(("^1Detections Penalty Warning: Cannot apply trust score penalty or store detection for %s (ID: %d) - session or metrics missing.^7"):format(playerName, playerId), 1)

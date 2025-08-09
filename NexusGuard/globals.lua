@@ -44,6 +44,9 @@ local NexusGuardServer = {
     Core = Core               -- Assign Core module
 }
 
+-- Expose early so modules loaded during Core initialization can reference it
+_G.NexusGuardServer = NexusGuardServer
+
 -- Initialize the Core module with Config and Utils
 if not Core.Initialize(NexusGuardServer.Config, Utils) then
     Log("^1[NexusGuard] CRITICAL: Failed to initialize Core module. NexusGuard may not function correctly.^7", 1)
@@ -75,6 +78,22 @@ end
 -- Delegates to the Core module which handles the Detections module.
 function NexusGuardServer.ProcessDetection(playerId, detectionType, detectionData)
     return Core.ProcessDetection(playerId, detectionType, detectionData)
+end
+
+-- Store a detection event in the database using a normalized format.
+-- Ensures detectionData is always a table with expected fields before persisting.
+function NexusGuardServer.Detections.Store(playerId, detectionType, detectionData)
+    if type(detectionData) ~= "table" then
+        detectionData = { value = detectionData }
+    end
+    detectionData.value = detectionData.value
+    detectionData.details = detectionData.details or {}
+    detectionData.clientValidated = detectionData.clientValidated or false
+    detectionData.serverValidated = detectionData.serverValidated or false
+
+    if NexusGuardServer.Database and NexusGuardServer.Database.StoreDetection then
+        NexusGuardServer.Database.StoreDetection(playerId, detectionType, detectionData)
+    end
 end
 
 -- Get the current status of the NexusGuard system.

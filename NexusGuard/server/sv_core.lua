@@ -248,13 +248,22 @@ function Core.ProcessDetection(playerId, detectionType, detectionData)
         Log("^1[Core]^7 Detections module not loaded. Cannot process detection.", 1)
         return false
     end
-    
+
+    -- Ensure detectionData is a table with consistent fields
+    if type(detectionData) ~= "table" then
+        detectionData = { value = detectionData }
+    else
+        detectionData.value = detectionData.value
+        detectionData.details = detectionData.details or {}
+        detectionData.clientValidated = detectionData.clientValidated or false
+    end
+
     local session = Core.GetSession(playerId)
     if not session then
         Log(("^1[Core]^7 No session found for player %d. Cannot process detection."):format(playerId), 1)
         return false
     end
-    
+
     return Core.modules.Detections.Process(playerId, detectionType, detectionData, session)
 end
 
