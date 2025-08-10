@@ -496,17 +496,54 @@ function RegisterNexusGuardServerEvents()
         end
     end)
 
-     -- Screenshot Taken Handler (Client -> Server)
-     -- Client confirms a screenshot was taken and provides the URL.
-     EventRegistry:AddEventHandler('ADMIN_SCREENSHOT_TAKEN', function(screenshotUrl, tokenData)
+    -- Screenshot Failure Handler (Client -> Server)
+    -- Client reports that a screenshot capture or upload failed.
+    EventRegistry:AddEventHandler('ADMIN_SCREENSHOT_FAILED', function(errorMessage, tokenData)
         local source = source -- Capture player source ID.
         if not source or source <= 0 then return end
         local playerName = GetPlayerName(source) or ("Unknown (" .. source .. ")")
 
         -- CRITICAL: Validate the security token.
         if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
-             Log(("^1[NexusGuard] Invalid security token received with screenshot confirmation from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
-             if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with screenshot confirmation') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Confirmation Token).") end
+            Log(("^1[NexusGuard] Invalid security token received with screenshot failure from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with screenshot failure') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Failure Token).") end
+            return
+        end
+
+        -- Validate error message format.
+        if type(errorMessage) ~= "string" then
+            Log(("^1[NexusGuard] Invalid screenshot failure data received from %s (ID: %d). Ignoring.^7"):format(playerName, source), 1)
+            return
+        end
+
+        Log(("^3[NexusGuard]^7 Screenshot capture failed for %s (ID: %d): %s^7"):format(playerName, source, errorMessage), 3)
+        if NexusGuardServer.Discord and NexusGuardServer.Discord.Send then
+            NexusGuardServer.Discord.Send("general", 'Screenshot Failed', ("Player: %s (ID: %d)\nError: %s"):format(playerName, source, errorMessage), NexusGuardServer.Config.Discord.webhooks and NexusGuardServer.Config.Discord.webhooks.general)
+        end
+        local session = NexusGuardServer.GetSession(source)
+        if session and session.metrics then
+            if not session.metrics.screenshotFailures then session.metrics.screenshotFailures = {} end
+            table.insert(session.metrics.screenshotFailures, { error = errorMessage, time = os.time() })
+        end
+    end)
+
+    -- Screenshot Taken Handler (Client -> Server)
+    -- Client confirms a screenshot was taken and provides the URL.
+    EventRegistry:AddEventHandler('ADMIN_SCREENSHOT_TAKEN', function(screenshotUrl, tokenData)
+        local source = source -- Capture player source ID.
+        if not source or source <= 0 then return end
+        local playerName = GetPlayerName(source) or ("Unknown (" .. source .. ")")
+
+        -- CRITICAL: Validate the security token.
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.ValidateToken or not NexusGuardServer.Security.ValidateToken(source, tokenData) then
+            Log(("^1[NexusGuard] Invalid security token received with screenshot confirmation from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with screenshot confirmation') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Confirmation Token).") end
+            return
+        end
+
+        -- Validate screenshot URL format.
+        if type(screenshotUrl) ~= "string" or screenshotUrl == "" then
+            Log(("^1[NexusGuard] Invalid screenshot URL received from %s (ID: %d). Ignoring.^7"):format(playerName, source), 1)
             return
         end
 
