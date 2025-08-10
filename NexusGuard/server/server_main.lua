@@ -546,6 +546,57 @@ function RegisterNexusGuardServerEvents()
             return
         end
 
+        -- Access threshold configuration
+        local Thresholds = NexusGuardServer.Config and NexusGuardServer.Config.Thresholds or {}
+        local serverSpeedThreshold = Thresholds.serverSideSpeedThreshold or 0
+        local minTimeDiff = Thresholds.minTimeDiffPositionCheck or 450
+        local spawnGraceMs = (Thresholds.spawnGracePeriod or 5) * 1000
+
+        local serverTime = GetGameTimer()
+
+        -- If server-side speed check is disabled, just update position and return
+        if serverSpeedThreshold <= 0 then
+            session.metrics.lastServerPosition = currentPos
+            session.metrics.lastServerPositionTimestamp = serverTime
+            session.metrics.lastValidPosition = currentPos
+            return
+        end
+
+        -- Handle spawn/respawn grace period
+        if session.metrics.justSpawned then
+            session.metrics.spawnGraceEnd = session.metrics.spawnGraceEnd or (serverTime + spawnGraceMs)
+            if serverTime < session.metrics.spawnGraceEnd then
+                session.metrics.lastServerPosition = currentPos
+                session.metrics.lastServerPositionTimestamp = serverTime
+                session.metrics.lastValidPosition = currentPos
+                return
+            else
+                session.metrics.justSpawned = false
+                session.metrics.spawnGraceEnd = nil
+            end
+        end
+
+        local lastPos = session.metrics.lastServerPosition
+        local lastTimestamp = session.metrics.lastServerPositionTimestamp
+        local computedVerticalVel = 0.0
+        if lastPos and lastTimestamp then
+            local timeDiff = serverTime - lastTimestamp
+            if timeDiff < minTimeDiff then
+                session.metrics.lastServerPosition = currentPos
+                session.metrics.lastServerPositionTimestamp = serverTime
+                return
+            end
+
+            local dz = currentPos.z - lastPos.z
+            computedVerticalVel = dz / (timeDiff / 1000.0)
+        else
+            -- First position update; initialize tracking and skip validation
+            session.metrics.lastServerPosition = currentPos
+            session.metrics.lastServerPositionTimestamp = serverTime
+            session.metrics.lastValidPosition = currentPos
+            return
+        end
+
         -- Mark the session as active
         if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
             NexusGuardServer.Session.UpdateActivity(source)
@@ -559,10 +610,6 @@ function RegisterNexusGuardServerEvents()
             local ped = GetPlayerPed(source)
             if ped and ped ~= -1 then
                 session.metrics.isInVehicle = GetVehiclePedIsIn(ped, false) ~= 0
-                local velocity = GetEntityVelocity(ped)
-                if velocity then
-                    session.metrics.verticalVelocity = velocity.z
-                end
                 session.metrics.isFalling = IsPedFalling and IsPedFalling(ped) or false
                 session.metrics.isRagdoll = false -- Fallback without native
                 session.metrics.isSwimming = false -- Fallback without native
@@ -572,10 +619,12 @@ function RegisterNexusGuardServerEvents()
                 session.metrics.isFalling = false
                 session.metrics.isRagdoll = false
                 session.metrics.isSwimming = false
-                session.metrics.verticalVelocity = 0.0
                 session.metrics.isInParachute = false
             end
         end
+
+        -- Override vertical velocity with calculation based on position delta
+        session.metrics.verticalVelocity = computedVerticalVel
 
         -- Call the validation function in the Detections module.
         if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidatePositionUpdate then
@@ -583,6 +632,10 @@ function RegisterNexusGuardServerEvents()
         else
             Log(("^1[NexusGuard] CRITICAL: Detections.ValidatePositionUpdate function not found in API! Cannot validate position for %s (ID: %d)^7"):format(playerName, source), 1)
         end
+
+        -- Update last known position/timestamp after validation
+        session.metrics.lastServerPosition = currentPos
+        session.metrics.lastServerPositionTimestamp = serverTime
     end)
 
     -- Health Update Handler (Client -> Server)
@@ -604,6 +657,22 @@ function RegisterNexusGuardServerEvents()
         if not session or not session.metrics then
             Log(("^1[NexusGuard] API Player session or metrics not found for %s (ID: %d) during health update.^7"):format(playerName, source), 1)
             return
+        end
+
+        local Thresholds = NexusGuardServer.Config and NexusGuardServer.Config.Thresholds or {}
+        local spawnGraceMs = (Thresholds.spawnGracePeriod or 5) * 1000
+
+        -- Detect respawn by checking health transition
+        local lastHealth = session.metrics.lastServerHealth
+        if lastHealth and lastHealth <= 0 and currentHealth > 0 then
+            session.metrics.justSpawned = true
+            session.metrics.spawnGraceEnd = GetGameTimer() + spawnGraceMs
+            SetTimeout(spawnGraceMs, function()
+                local sess = NexusGuardServer.GetSession(source)
+                if sess and sess.metrics then
+                    sess.metrics.justSpawned = false
+                end
+            end)
         end
 
         -- Mark the session as active
@@ -640,6 +709,8 @@ function RegisterNexusGuardServerEvents()
         else
              Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Cannot validate health/armor for %s (ID: %d)^7"):format(playerName, source), 1)
         end
+
+        session.metrics.lastServerHealth = currentHealth
     end)
 
     -- Weapon Clip Size Check Handler (Client -> Server)
