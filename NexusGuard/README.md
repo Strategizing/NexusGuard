@@ -14,6 +14,9 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 *   **Helper Utilities**: Basic logging, database-driven ban system (requires setup), admin notifications.
 *   **Discord Integration**: Basic webhook logging and Rich Presence support.
 *   **Database Support**: Includes schema (`sql/schema.sql`) for storing bans, detections, and session summaries using `oxmysql` (via `server/sv_database.lua`).
+*   **Dependency Management**: Robust dependency detection and version validation with fallbacks for missing dependencies.
+*   **FiveM Natives Wrapper**: Safe wrapper for FiveM natives with error handling and consistent behavior across environments.
+*   **Server Authority**: Enhanced server-side validation for player health, position, and damage events.
 
 ## Dependencies
 
@@ -62,6 +65,8 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 *   **Thresholds**: Tune detection thresholds (`Config.Thresholds`) carefully through testing.
 *   **Detectors**: Enable/disable specific detectors (`Config.Detectors`).
 *   **Actions**: Configure reactions (`Config.Actions`).
+*   **Dependency Management**: The framework now includes robust dependency detection and version validation. See `docs/dependency_manager.md` for details.
+*   **Documentation**: Detailed documentation is available in the `docs/` directory, including guides for creating custom detectors, configuring the framework, and understanding core modules.
 
 ## Adding Custom Detectors
 

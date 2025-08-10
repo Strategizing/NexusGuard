@@ -30,14 +30,30 @@ local coords = Natives.GetEntityCoords(entityId)
 
 -- Check if we're on the server
 local isServer = Natives.IsDuplicityVersion()
+
+-- Create a vector3 safely (works in all environments)
+local position = Natives.vector3(x, y, z)
 ```
 
 ### Error Handling
 
 When a native function call fails or throws an error, the wrapper will:
-1. Log the error (if configured to do so)
-2. Return `nil` instead of crashing the script
-3. Optionally provide a fallback value
+
+1. Log the error (if configured to do so, with rate limiting to prevent console spam)
+2. Return `nil` or a default value instead of crashing the script
+3. Provide consistent fallback values for different types of natives
+
+### Vector3 Handling
+
+The Natives wrapper provides a consistent `vector3` function that works in all environments:
+
+```lua
+-- Create a vector3 object that works in all environments
+local position = Natives.vector3(x, y, z)
+
+-- The function handles nil values gracefully
+local safePosition = Natives.vector3(nil, nil, nil) -- Returns {x=0, y=0, z=0}
+```
 
 ## Best Practices
 
@@ -76,13 +92,13 @@ end
 
 function GetSafeCoordinates(entity)
     if not entity then return nil end
-    
+
     local coords = Natives.GetEntityCoords(entity)
     if not coords then
         -- Fallback to default coordinates or get from another source
         return {x = 0.0, y = 0.0, z = 0.0}
     end
-    
+
     return coords
 end
 ```
@@ -121,17 +137,17 @@ Natives._customHandlers.GetPlayerName = function(playerId)
     if not playerId or playerId < 0 then
         return "Invalid Player"
     end
-    
+
     -- Call the original native with error handling
     local success, result = pcall(function()
         return GetPlayerName(playerId)
     end)
-    
+
     -- Custom post-processing
     if not success or not result or result == "" then
         return "Unknown Player"
     end
-    
+
     return result
 end
 ```
