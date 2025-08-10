@@ -52,6 +52,7 @@ EventRegistry.events = {
     ADMIN_NOTIFICATION = "admin:notification",       -- Server -> Client: Server sends a notification message specifically to an admin client.
     ADMIN_REQUEST_SCREENSHOT = "admin:requestScreenshot", -- Server -> Client: Server requests the client to take and upload a screenshot.
     ADMIN_SCREENSHOT_TAKEN = "admin:screenshotTaken",   -- Client -> Server: Client confirms screenshot was taken and provides the URL.
+    ADMIN_SCREENSHOT_FAILED = "admin:screenshotFailed", -- Client -> Server: Client reports screenshot capture/upload failure.
 
     -- System Status & Checks (Client -> Server)
     SYSTEM_ERROR = "system:error",             -- Client -> Server: Client reports an internal error (e.g., in a detector).

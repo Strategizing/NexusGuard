@@ -741,6 +741,22 @@ session.metrics.verticalVelocity = computedVerticalVel
             end)
         end
 
+        local Thresholds = NexusGuardServer.Config and NexusGuardServer.Config.Thresholds or {}
+        local spawnGraceMs = (Thresholds.spawnGracePeriod or 5) * 1000
+
+        -- Detect respawn by checking health transition
+        local lastHealth = session.metrics.lastServerHealth
+        if lastHealth and lastHealth <= 0 and currentHealth > 0 then
+            session.metrics.justSpawned = true
+            session.metrics.spawnGraceEnd = GetGameTimer() + spawnGraceMs
+            SetTimeout(spawnGraceMs, function()
+                local sess = NexusGuardServer.GetSession(source)
+                if sess and sess.metrics then
+                    sess.metrics.justSpawned = false
+                end
+            end)
+        end
+
         -- Mark the session as active
         if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
             NexusGuardServer.Session.UpdateActivity(source)
