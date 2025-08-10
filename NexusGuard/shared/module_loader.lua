@@ -61,23 +61,31 @@ function ModuleLoader.Load(modulePath, isOptional)
     end)
 
     if not success then
-        if isOptional then
-            -- Just return nil for optional modules that fail to load
-            ModuleLoader.cache.loading[modulePath] = nil
-            return nil
-        else
-            -- Log error and return empty table to prevent crashes
+        if not isOptional then
+            -- Log error for required modules
             print("^1[ModuleLoader] Failed to load module: " .. modulePath .. " - " .. tostring(module) .. "^7")
-            module = {}
         end
+        ModuleLoader.cache.loading[modulePath] = nil
+        return nil
     end
 
     -- Store the loaded module
     ModuleLoader.cache.loaded[modulePath] = module
 
     -- Fill in the proxy object for circular dependencies
-    for k, v in pairs(module) do
-        proxy[k] = v
+    if type(module) == "table" then
+        for k, v in pairs(module) do
+            proxy[k] = v
+        end
+    else
+        proxy._value = module
+        if type(module) == "function" then
+            setmetatable(proxy, {
+                __call = function(_, ...)
+                    return module(...)
+                end
+            })
+        end
     end
 
     -- Clear the loading flag

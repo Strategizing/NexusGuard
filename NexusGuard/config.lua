@@ -38,7 +38,7 @@ Config.SecuritySecret = "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" -- CRITICAL:
 Config.Security = {
     TokenValidityWindow = 60, -- Seconds a token is considered valid after generation (Default: 60)
     TokenCacheCleanupIntervalMs = 60000, -- Milliseconds between cleaning up expired tokens from the anti-replay cache (Default: 60000 = 1 minute)
-    -- TODO: Implement replay prevention by tracking used token signatures within the validity window.
+    -- Anti-replay protection: token signatures are cached to prevent reuse within the validity window.
 }
 
 -- [[ DEPRECATED / PLACEHOLDER SECTIONS REMOVED ]]
@@ -218,6 +218,13 @@ Config.Features = {
 -- Performance Settings
 Config.Performance = {
     adaptiveChecking = true, -- Adjust check frequency based on suspicion level
+    adaptiveTiming = {
+        baseInterval = 1000, -- Base interval used for adaptive calculations
+        highRiskMultiplier = 0.5, -- Interval multiplier when suspicion is at maximum
+        lowRiskMultiplier = 2.0, -- Interval multiplier when suspicion is zero
+        minimumDelay = 200, -- Absolute minimum delay between checks (ms)
+        maxSuspicion = 100 -- Maximum suspicion score before clamping
+    },
     batchUpdates = true, -- Group position/health updates to reduce network traffic
     optimizeLogging = true, -- Only log important events in production
     smartDetection = true -- Context-aware detection (reduces false positives)
@@ -338,6 +345,11 @@ Config.Discord = {
             anticheatUpdates = true -- Anti-cheat update notifications
         } -- Closing brace for Config.Discord.bot.notifications
         }, -- Closing brace for Config.Discord.bot
+
+        webhookWhitelist = {
+            -- Add full Discord webhook URLs that can be used with the specificWebhook parameter
+            -- "https://discord.com/api/webhooks/1234567890/abcdef",
+        },
 
         webhooks = {
             general = "", -- General anti-cheat logs (Can be the same as Config.DiscordWebhook)

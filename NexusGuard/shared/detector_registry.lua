@@ -60,7 +60,8 @@ end
 local function CreateDetectorThread(detectorInfo)
     local detectorName = detectorInfo.name
     local detector = detectorInfo.detector
-    local interval = detector.interval or 1000 -- Default interval if not specified by detector.
+    local baseInterval = detector.interval or 1000 -- Base interval if not specified by detector.
+    local interval = baseInterval
 
     -- Ensure the main NexusGuard instance is available (needed for SafeDetect).
     if not DetectorRegistry.nexusGuardInstance then
@@ -74,6 +75,20 @@ local function CreateDetectorThread(detectorInfo)
         detector.active = false
         return nil
     end
+
+    local adaptiveEnabled = DetectorRegistry.nexusGuardInstance.Config
+        and DetectorRegistry.nexusGuardInstance.Config.Performance
+        and DetectorRegistry.nexusGuardInstance.Config.Performance.adaptiveChecking
+    local playerId = PlayerId and PlayerId() or 0
+
+    local function updateInterval()
+        if adaptiveEnabled and DetectorRegistry.nexusGuardInstance.ComputeAdaptiveInterval then
+            interval = DetectorRegistry.nexusGuardInstance:ComputeAdaptiveInterval(baseInterval, playerId)
+        else
+            interval = baseInterval
+        end
+    end
+    updateInterval()
 
     -- If a thread reference already exists, clear it. The old thread should terminate based on the `detector.active` flag.
     if DetectorRegistry.activeThreads[detectorName] then
@@ -91,9 +106,19 @@ local function CreateDetectorThread(detectorInfo)
             -- Check if enough time has passed since the last execution based on the detector's interval.
             if currentTime - (detector.lastCheck or 0) >= interval then
                 -- Execute the detector's Check function safely using the wrapper from the main instance.
-                -- This prevents errors in one detector from crashing the whole script.
-                DetectorRegistry.nexusGuardInstance:SafeDetect(detector.Check, detectorName)
+                local result = DetectorRegistry.nexusGuardInstance:SafeDetect(detector.Check, detectorName)
                 detector.lastCheck = currentTime -- Update last execution time.
+
+                if adaptiveEnabled then
+                    if type(result) == "number" then
+                        DetectorRegistry.nexusGuardInstance:AdjustSuspicion(playerId, result)
+                    elseif result == false then
+                        DetectorRegistry.nexusGuardInstance:AdjustSuspicion(playerId, 1)
+                    else
+                        DetectorRegistry.nexusGuardInstance:AdjustSuspicion(playerId, -0.1)
+                    end
+                    updateInterval()
+                end
             end
 
             -- Calculate wait time: Use a base minimum (e.g., 50ms) but don't exceed the interval or a reasonable max (e.g., 1000ms).

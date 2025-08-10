@@ -98,10 +98,10 @@ function Detector.StartChecking()
                 local checkPassed = Detector.Check() -- Assumes Check() returns true on pass, false/nil on detection.
 
                 -- Adaptive Timing: Schedule next check based on result.
-                if checkPassed == false then -- Explicitly check for false (or nil) indicating detection/suspicion.
+                if type(checkPassed) == "number" and checkPassed > 0 then
                     -- Suspicious activity detected, schedule the next check sooner (e.g., half interval).
                     nextCheck = currentTime + math.floor(Detector.interval * 0.5)
-                    Log(("[%s Detector] Check failed/suspicious. Next check in %dms.^7"):format(DetectorName, math.floor(Detector.interval * 0.5)), 3)
+                    Log(("[%s Detector] Suspicion score %d. Next check in %dms.^7"):format(DetectorName, checkPassed, math.floor(Detector.interval * 0.5)), 3)
                 else
                     -- Check passed, schedule next check at the normal interval.
                     nextCheck = currentTime + Detector.interval
@@ -147,11 +147,11 @@ function Detector.Check()
     --         value = health,
     --         threshold = 200
     --     })
-    --     return false -- Indicate suspicion
+    --     return 1 -- Indicate suspicion
     -- end
 
     -- If everything seems normal for this check
-    return true -- Indicate checks passed
+    return 0 -- Suspicion score (0 = no suspicion)
 end
 
 --[[

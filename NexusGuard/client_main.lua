@@ -34,7 +34,7 @@ if not DetectorRegistry then
     -- Consider halting initialization if the registry is crucial.
 end
 
--- REMOVED _G.NexusGuard ASSIGNMENT
+local EventProxy = require('client/event_proxy')
 
 -- Environment Check & Debug Compatibility
 -- Attempts to detect if running outside a standard FiveM client environment (e.g., for testing).
@@ -128,6 +128,9 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             warningIssued = false       -- Tracks if the initial local warning has been shown
         },
 
+        -- Suspicion scores per player (used for adaptive detector intervals)
+        suspicion = {},
+        
         -- Discord Rich Presence State (if enabled in config.lua)
         richPresence = {
             appId = nil,            -- Set from Config.Discord.RichPresence.AppId
@@ -164,6 +167,41 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     -- _G.NexusGuard = NexusGuardInstance -- REMOVED: Avoid global assignment. Instance passed via Initialize.
 
     --[[
+        Suspicion Management
+        Stores a suspicion score for each player and provides helpers for
+        adjusting and retrieving the score. Scores are clamped to be
+        non-negative and can be used to adapt detector intervals.
+    ]]
+    function NexusGuardInstance:AdjustSuspicion(playerId, delta)
+        local current = self.suspicion[playerId] or 0
+        current = current + delta
+        if current < 0 then current = 0 end
+        self.suspicion[playerId] = current
+        return current
+    end
+
+    function NexusGuardInstance:GetSuspicion(playerId)
+        return self.suspicion[playerId] or 0
+    end
+
+    -- Computes an adaptive interval based on suspicion score and config values
+    function NexusGuardInstance:ComputeAdaptiveInterval(baseInterval, playerId)
+        local perf = self.Config and self.Config.Performance
+        local adaptive = perf and perf.adaptiveTiming or {}
+        local lowMult = adaptive.lowRiskMultiplier or 2.0
+        local highMult = adaptive.highRiskMultiplier or 0.5
+        local minDelay = adaptive.minimumDelay or 200
+        local maxScore = adaptive.maxSuspicion or 100
+        local score = self:GetSuspicion(playerId)
+        local normalized = math.min(score, maxScore) / maxScore
+        local multiplier = lowMult - (lowMult - highMult) * normalized
+        local base = baseInterval or adaptive.baseInterval or 1000
+        local interval = base * multiplier
+        if interval < minDelay then interval = minDelay end
+        return interval
+    end
+
+    --[[
         Safe Detection Wrapper (Called by detector threads)
         Wraps individual detector checks (`Detector.Check()`) with pcall for error handling.
         Prevents a single faulty detector from crashing the entire client script.
@@ -191,11 +229,11 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             if errorInfo.count > errorThreshold and (GetGameTimer() - errorInfo.firstSeen < errorTimeWindow) then
                 print(("^1[NexusGuard] Detector '%s' is persistently failing. Reporting error to server.^7"):format(detectionName))
                 if self.securityToken then -- Ensure we have a token to send
-                    if EventRegistry then
+                    if EventProxy then
                         -- Send the error details along with the security token for validation server-side.
-                        EventRegistry:TriggerServerEvent('SYSTEM_ERROR', detectionName, tostring(err), self.securityToken)
+                        EventProxy:TriggerServer('SYSTEM_ERROR', detectionName, tostring(err), self.securityToken)
                     else
-                        print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot report client error to server.^7")
+                        print("^1[NexusGuard] CRITICAL: EventProxy module not loaded. Cannot report client error to server.^7")
                     end
                 else
                     print("^3[NexusGuard] Warning: Cannot report persistent detector error to server - security token not yet received.^7")
@@ -248,13 +286,13 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
 
             -- Request the security token from the server. This is crucial for validating subsequent client->server events.
             print("^2[NexusGuard]^7 Requesting security token from server...")
-            if EventRegistry then
+            if EventProxy then
                 -- Note: The clientHash sent here is currently basic and not cryptographically secure for client identification.
                 -- A more robust system might involve server-generated challenges.
                 local clientHash = GetCurrentResourceName() .. "-" .. math.random(100000, 999999)
-                EventRegistry:TriggerServerEvent('SECURITY_REQUEST_TOKEN', clientHash)
+                EventProxy:TriggerServer('SECURITY_REQUEST_TOKEN', clientHash)
             else
-                print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot request security token.^7")
+                print("^1[NexusGuard] CRITICAL: EventProxy module not loaded. Cannot request security token.^7")
                 -- Initialization might need to halt here if the token is absolutely required early on.
             end
 
@@ -595,6 +633,11 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             return
         end
 
+        -- Increase suspicion score for the local player
+        if self.AdjustSuspicion then
+            self:AdjustSuspicion(PlayerId(), 10)
+        end
+
         -- On the first detection for this client session, issue a local warning only.
         if not self.flags.warningIssued then
             self.flags.suspiciousActivity = true -- Set a general suspicion flag (might be used elsewhere).
@@ -614,12 +657,12 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         else
             -- For subsequent detections after the initial warning, report directly to the server.
             print(("^1[NexusGuard] Reporting Detection to Server - Type: %s, Details: %s^7"):format(tostring(detectionType), tostring(details)))
-            if EventRegistry then
+            if EventProxy then
                 -- Send the detection type, details, and the security token to the server for verification and action.
-                EventRegistry:TriggerServerEvent('DETECTION_REPORT', detectionType, details, self.securityToken)
+                EventProxy:TriggerServer('DETECTION_REPORT', detectionType, details, self.securityToken)
             else
-                -- EventRegistry is essential for server communication.
-                print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot report detection to server.^7")
+                -- EventProxy is essential for server communication.
+                print("^1[NexusGuard] CRITICAL: EventProxy module not loaded. Cannot report detection to server.^7")
             end
         end
     end

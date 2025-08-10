@@ -17,6 +17,14 @@ local DiscordModule = {
 local Config = _G.Config or {} -- Fallback, ideally passed or accessed via API
 local Log = function(msg, level) print(msg) end -- Basic fallback for Log
 
+-- Validate if a URL points to an expected Discord domain
+local function IsDiscordWebhookURL(url)
+    if type(url) ~= "string" then return false end
+    local host = url:match("^https?://([^/]+)/")
+    if not host then return false end
+    return host:match("discordapp%.com$") or host:match("discord%.com$")
+end
+
 -- Function to set the Config and Log references, called from globals.lua after loading Utils
 function DiscordModule.Initialize(cfg, logFunc)
     Config = cfg or Config
@@ -34,7 +42,26 @@ function DiscordModule.Send(category, title, messageOrData, specificWebhook)
     -- Check if Discord integration is enabled globally OR if general logging via DiscordWebhook is enabled.
     if not discordConfig or (not discordConfig.enabled and not Config.DiscordWebhook) then return end
 
-    local webhookURL = specificWebhook -- Use specific URL if provided.
+    local webhookURL
+
+    -- Allow a specific webhook only if it's present in the whitelist
+    if specificWebhook and specificWebhook ~= "" then
+        local allowed = false
+        if discordConfig and discordConfig.webhookWhitelist then
+            for _, allowedUrl in ipairs(discordConfig.webhookWhitelist) do
+                if allowedUrl == specificWebhook then
+                    allowed = true
+                    break
+                end
+            end
+        end
+        if allowed then
+            webhookURL = specificWebhook
+        else
+            Log("^3[NexusGuard] Specific webhook not whitelisted; ignoring provided URL.^7", 3)
+        end
+    end
+
     -- If no specific URL, determine the correct webhook based on category or general config.
     if not webhookURL or webhookURL == "" then
         -- Prioritize category-specific webhook from Config.Discord.webhooks.
@@ -47,6 +74,12 @@ function DiscordModule.Send(category, title, messageOrData, specificWebhook)
             -- Log("Discord.Send: No valid webhook URL found for category '" .. tostring(category) .. "' or general config.", 3)
             return -- Exit if no valid webhook URL can be determined.
         end
+    end
+
+    -- Validate that the webhook URL points to Discord
+    if not IsDiscordWebhookURL(webhookURL) then
+        Log("^3[NexusGuard] Invalid Discord webhook domain: " .. tostring(webhookURL) .. "^7", 3)
+        return
     end
 
     -- Ensure required FiveM natives and libraries are available.

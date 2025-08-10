@@ -141,7 +141,7 @@ function Detector.Check()
                 --         reason = reason, distance = distanceToGround, velocityZ = zVelocity, collision = collisionDisabled
                 --     })
                 -- end
-                -- return false -- Indicate suspicion for adaptive timing (optional)
+                -- return 1 -- Indicate suspicion for adaptive timing (optional)
             end
         end
     else
@@ -154,7 +154,7 @@ function Detector.Check()
         -- Further checks could involve interior checks or distance from known map boundaries.
     end
 
-    return true -- Indicate check cycle completed.
+    return 0 -- Suspicion score (0 = no suspicion)
 end
 
 --[[

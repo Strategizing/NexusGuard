@@ -118,7 +118,7 @@ function Detector.Check()
 
     -- This client-side check doesn't "detect" anything itself; it merely reports the current state.
     -- The actual detection (comparison against whitelist/blacklist) happens server-side.
-    return true -- Indicate check cycle completed successfully.
+    return 0 -- Suspicion score (0 = no suspicion)
 end
 
 --[[

@@ -146,7 +146,7 @@ function Detector.Check()
     -- Update the detector's local state for the next check.
     Detector.state.lastHealth = currentHealth
 
-    return true -- Indicate check cycle completed (doesn't imply cheat/no cheat here).
+    return 0 -- Suspicion score (0 = no suspicion)
 end
 
 --[[

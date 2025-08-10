@@ -10,6 +10,7 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 *   **Event-Driven Architecture**: Uses standardized events for communication via `shared/event_registry.lua`.
 *   **Client & Server Logic**: Basic separation of client-side checks and server-side validation/actions.
 *   **Configuration**: Extensive configuration options via `config.lua`.
+*   **Secure Token System**: Includes HMAC-SHA256 tokens with anti-replay protection.
 *   **Basic Detections Included**: Examples for God Mode, Speed Hack, NoClip, Teleport, Weapon Mods, Resource Monitoring, Menu Keybinds.
 *   **Helper Utilities**: Basic logging, database-driven ban system (requires setup), admin notifications.
 *   **Discord Integration**: Basic webhook logging and Rich Presence support.
@@ -59,7 +60,7 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 
 *   **`config.lua`**: Contains all user-configurable settings. Read the comments carefully.
 *   **`Config.SecuritySecret`**: **MUST BE CHANGED** to a strong, unique secret. This is used by the default secure token system.
-*   **Security Implementation**: A default secure token system using HMAC-SHA256 (via `ox_lib`) is now included. Ensure `ox_lib` is installed and `Config.SecuritySecret` is set correctly.
+*   **Security Implementation**: A default secure token system using HMAC-SHA256 (via `ox_lib`) with built-in anti-replay protection is now included. Ensure `ox_lib` is installed and `Config.SecuritySecret` is set correctly.
 *   **Permissions**: Configure `Config.PermissionsFramework` and `Config.AdminGroups` in `config.lua`. You only need to edit `globals.lua` if using the `"custom"` framework setting.
 *   **Resource Verification**: The logic is implemented, but if enabled, the `whitelist` or `blacklist` in `config.lua` **MUST BE CONFIGURED ACCURATELY**. Whitelist mode is dangerous if not all required resources are listed.
 *   **Thresholds**: Tune detection thresholds (`Config.Thresholds`) carefully through testing.

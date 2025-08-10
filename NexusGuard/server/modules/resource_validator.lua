@@ -43,26 +43,15 @@ local Log = function(...)
 end
 
 -- Attempt to load crypto functions from ox_lib
-local hasOxLib = pcall(function() return lib and lib.crypto ~= nil end)
 local hashFunction = nil
 
-if hasOxLib and lib and lib.crypto and lib.crypto.hash then
+if lib and lib.crypto and lib.crypto.hash then
     hashFunction = function(data)
         return lib.crypto.hash('sha256', data)
     end
     Log("^2[ResourceValidator]^7 Using ox_lib crypto functions for resource validation", 2)
 else
-    -- Fallback to a simple hash function if ox_lib is not available
-    hashFunction = function(data)
-        if not data then return "0" end
-        
-        local h = 0
-        for i = 1, #data do
-            h = (h * 31 + string.byte(data, i)) % 2^32
-        end
-        return tostring(h)
-    end
-    Log("^3[ResourceValidator]^7 Using fallback hash function for resource validation", 2)
+    Log("^3[ResourceValidator]^7 lib.crypto.hash unavailable. Resource validation disabled.", 2)
 end
 
 -- Resource Validator module
@@ -70,7 +59,9 @@ local ResourceValidator = {
     -- Configuration
     scanInterval = 60000, -- 1 minute between full scans
     lastFullScan = 0,
-    
+
+    enabled = hashFunction ~= nil,
+
     -- Resource tracking
     resourceStates = {},
     knownResources = {},
@@ -113,6 +104,11 @@ local ResourceValidator = {
 
 -- Initialize resource tracking
 function ResourceValidator.Initialize()
+    if not ResourceValidator.enabled then
+        Log("^3[ResourceValidator]^7 Resource validation disabled due to missing cryptographic hash function", 2)
+        return false
+    end
+
     Log("^2[ResourceValidator]^7 Initializing resource validation system", 2)
     
     -- Initialize resource tracking tables
@@ -172,26 +168,35 @@ end
 
 -- Generate hashes for critical resource files
 function ResourceValidator.GenerateResourceHashes(resourceName)
+    if not hashFunction then
+        return false
+    end
+
     local resourcePath = Natives.GetResourcePath(resourceName)
     if not resourcePath or resourcePath == "" then return false end
     
     ResourceValidator.fileHashes[resourceName] = {}
-    
+
     -- Check each critical file
     for _, fileName in ipairs(ResourceValidator.criticalFiles) do
         local fileContent = Natives.LoadResourceFile(resourceName, fileName)
         if fileContent then
-            local hash = hashFunction(fileContent)
-            ResourceValidator.fileHashes[resourceName][fileName] = hash
+            local hash = hashFunction and hashFunction(fileContent)
+            if hash then
+                ResourceValidator.fileHashes[resourceName][fileName] = hash
+            end
         end
     end
-    
+
     -- Generate a combined hash for the resource
     local manifestContent = Natives.LoadResourceFile(resourceName, "fxmanifest.lua") or
                            Natives.LoadResourceFile(resourceName, "__resource.lua") or ""
-    
-    ResourceValidator.resourceHashes[resourceName] = hashFunction(manifestContent)
-    
+
+    local manifestHash = hashFunction and hashFunction(manifestContent)
+    if manifestHash then
+        ResourceValidator.resourceHashes[resourceName] = manifestHash
+    end
+
     return true
 end
 
@@ -287,6 +292,10 @@ end
 
 -- Perform a full scan of all resources
 function ResourceValidator.PerformFullScan()
+    if not ResourceValidator.enabled then
+        return false
+    end
+
     Log("^2[ResourceValidator]^7 Performing full resource scan", 3)
     ResourceValidator.lastFullScan = Natives.GetGameTimer()
     
@@ -356,9 +365,9 @@ function ResourceValidator.PerformFullScan()
             if previousHash then
                 local fileContent = Natives.LoadResourceFile(name, fileName)
                 if fileContent then
-                    local currentHash = hashFunction(fileContent)
-                    
-                    if currentHash ~= previousHash then
+                    local currentHash = hashFunction and hashFunction(fileContent)
+
+                    if currentHash and currentHash ~= previousHash then
                         hasChanges = true
                         table.insert(changedFiles, fileName)
                         
@@ -397,13 +406,16 @@ function ResourceValidator.PerformFullScan()
                 if fileContent then
                     hasChanges = true
                     table.insert(changedFiles, fileName .. " (added)")
-                    
+
                     -- Generate hash for the new file
                     if not ResourceValidator.fileHashes[name] then
                         ResourceValidator.fileHashes[name] = {}
                     end
-                    ResourceValidator.fileHashes[name][fileName] = hashFunction(fileContent)
-                    
+                    local newHash = hashFunction and hashFunction(fileContent)
+                    if newHash then
+                        ResourceValidator.fileHashes[name][fileName] = newHash
+                    end
+
                     -- Check for suspicious code
                     local isSuspicious, pattern = ResourceValidator.CheckForSuspiciousCode(name, fileContent)
                     if isSuspicious then
