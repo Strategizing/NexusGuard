@@ -227,7 +227,7 @@ function OnPlayerConnecting(playerName, setKickReason, deferrals)
     Log(("^2[NexusGuard]^7 Player connection approved: %s (ID: %d, License: %s)^7"):format(playerName, source, license or "N/A"), 2)
     -- Finalize the deferral, allowing the player to join.
     deferrals.done()
-end)
+end
 
 --[[
     Player Disconnected Handler Function (OnPlayerDropped)
@@ -340,12 +340,24 @@ function RegisterNexusGuardServerEvents()
             return
         end
 
+        -- Normalize detection data before processing
+        if type(detectionData) ~= "table" then
+            detectionData = { value = detectionData, details = {}, clientValidated = true, serverValidated = false }
+        else
+            detectionData = {
+                value = detectionData.value,
+                details = detectionData.details or detectionData,
+                clientValidated = true,
+                serverValidated = detectionData.serverValidated or false
+            }
+        end
+
         -- Process the detection using the Detections module via API.
         if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
-             -- Pass the player ID, detection details, and the full session object to the processing function.
-             NexusGuardServer.Detections.Process(source, detectionType, detectionData, session)
+            -- Pass the player ID, detection details, and the full session object to the processing function.
+            NexusGuardServer.Detections.Process(source, detectionType, detectionData, session)
         else
-             Log(("^1[NexusGuard] CRITICAL: Detections.Process function not found in API! Cannot process detection '%s' from %s (ID: %d)^7"):format(tostring(detectionType), playerName, source), 1)
+            Log(("^1[NexusGuard] CRITICAL: Detections.Process function not found in API! Cannot process detection '%s' from %s (ID: %d)^7"):format(tostring(detectionType), playerName, source), 1)
         end
     end)
 
@@ -432,7 +444,12 @@ function RegisterNexusGuardServerEvents()
                 -- Process this as a detection event.
                 local session = NexusGuardServer.GetSession(source) -- Get session via API
                 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
-                    NexusGuardServer.Detections.Process(source, "ResourceMismatch", { mismatched = MismatchedResources, mode = checkMode }, session)
+                    NexusGuardServer.Detections.Process(source, "ResourceMismatch", {
+                        value = #MismatchedResources,
+                        details = { mismatched = MismatchedResources, mode = checkMode },
+                        clientValidated = false,
+                        serverValidated = true
+                    }, session)
                 end
                 -- Ban or kick based on config.
                 if rvConfig.banOnMismatch then
@@ -644,10 +661,15 @@ function RegisterNexusGuardServerEvents()
                 -- Process as a detection event.
                 if NexusGuardServer.Detections.Process then
                     NexusGuardServer.Detections.Process(source, "ServerWeaponClipCheck", {
-                        weaponHash = weaponHash,
-                        reportedClip = clipCount,
-                        baseClip = baseClipSize,
-                        maxAllowed = maxAllowedClip
+                        value = clipCount,
+                        details = {
+                            weaponHash = weaponHash,
+                            reportedClip = clipCount,
+                            baseClip = baseClipSize,
+                            maxAllowed = maxAllowedClip
+                        },
+                        clientValidated = false,
+                        serverValidated = true
                     }, session)
                 end
             end
