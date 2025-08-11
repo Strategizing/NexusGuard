@@ -156,12 +156,12 @@ end
 
 --[[
     Generates a cryptographically secure random nonce.
-    Used to prevent replay attacks in security tokens.
+    Returns nil if a secure random generator is unavailable, disabling token issuance.
 
-    @return (string): A random nonce string, or nil on failure.
+    @return (string | nil): A random nonce string, or nil on failure.
 ]]
 function Security.GenerateNonce()
-    -- Try to use ox_lib's secure random function if available
+    -- Use ox_lib's secure random function if available
     if Dependencies.status.ox_lib.available and lib and lib.crypto and lib.crypto.randomBytes then
         local success, result = pcall(function()
             return lib.crypto.randomBytes(Security.nonceLength)
@@ -169,23 +169,15 @@ function Security.GenerateNonce()
 
         if success and result then
             return result
+        else
+            Log("^1SECURITY ERROR: Failed to generate secure random bytes for nonce.^7", 1)
+            return nil
         end
     end
 
-    -- Fallback to a less secure but still reasonable method
-    local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    local length = Security.nonceLength * 2 -- Compensate for lower entropy
-    local nonce = ""
-
-    -- Seed the random number generator with current time and player count
-    math.randomseed(os.time() + os.clock() * 1000)
-
-    for i = 1, length do
-        local randIndex = math.random(1, #chars)
-        nonce = nonce .. string.sub(chars, randIndex, randIndex)
-    end
-
-    return nonce
+    -- Secure random generator not available
+    Log("^1SECURITY CRITICAL: Secure random generator unavailable. Cannot generate nonce.^7", 1)
+    return nil
 end
 
 --[[
