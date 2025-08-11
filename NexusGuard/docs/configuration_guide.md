@@ -44,14 +44,22 @@ You can enable or disable individual detection modules:
 
 ```lua
 Config.Detectors = {
-    godmode = true,
-    speedhack = true,
-    teleport = true,
+    weaponModification = true,
+    resourceInjection = true,
+    explosionSpamming = true,
+    objectSpawning = true,
     noclip = true,
-    resourcemonitor = true,
-    menudetection = true,
-    vehicle = true,
+    freecam = true,
+    menuDetection = true,
+    vehicleModification = true,
     -- Add your custom detectors here
+}
+
+-- Server-side detections (clients act only as sensors)
+Config.ServerDetections = {
+    speed = true,
+    teleport = true,
+    health = true
 }
 ```
 
@@ -125,18 +133,25 @@ Config.Actions = {
     },
     
     -- Detection-specific actions
-    godmode = {
+    ServerGodModeCheck = {
         warnThreshold = 70,
         kickThreshold = 40,
         banThreshold = 20,
         trustImpact = 20
     },
-    
-    speedhack = {
+
+    ServerSpeedCheck = {
         warnThreshold = 80,
         kickThreshold = 50,
         banThreshold = 30,
         trustImpact = 15
+    },
+
+    ServerTeleportCheck = {
+        warnThreshold = 80,
+        kickThreshold = 50,
+        banThreshold = 30,
+        trustImpact = 10
     },
     
     -- Add custom actions for other detection types

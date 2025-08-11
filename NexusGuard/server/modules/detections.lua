@@ -280,6 +280,7 @@ function Detections.Process(playerId, detectionType, detectionData, session)
     -- Access config tables via the API object for convenience.
     local Config = NexusGuardServer.Config
     local Thresholds = Config.Thresholds or {}
+    local ServerDetections = Config.ServerDetections or {}
     local Features = Config.Features or {}
 
     -- --- Specific Detection Type Validation Logic ---
@@ -772,6 +773,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
     -- Access config tables via the API object for convenience.
     local Config = NexusGuardServer.Config
     local Thresholds = Config.Thresholds or {}
+    local ServerDetections = Config.ServerDetections or {}
 
     -- Update player state if not already done in server_main
     if not session.metrics.stateUpdated then
@@ -832,7 +834,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
             local distance = #(currentPos - lastPos) -- Calculate distance moved.
 
             -- Check for teleport (large distance change)
-            if distance > teleportThreshold then
+            if (ServerDetections.teleport ~= false) and distance > teleportThreshold then
                 -- Check if this is a legitimate teleport (e.g., admin command, script function)
                 local isLegitTeleport = false
 
@@ -904,7 +906,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
             end
 
             -- Check if calculated speed exceeds the effective threshold.
-            if speed > effectiveSpeedThreshold then
+            if (ServerDetections.speed ~= false) and speed > effectiveSpeedThreshold then
                 local reason = string.format("Calculated speed %.2f m/s exceeded threshold %.2f m/s%s", speed, effectiveSpeedThreshold, reasonSuffix)
                 local details = {
                     speed = speed,
@@ -1029,6 +1031,7 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
     -- Access config tables via the API object for convenience.
     local Config = NexusGuardServer.Config
     local Thresholds = Config.Thresholds or {}
+    local ServerDetections = Config.ServerDetections or {}
 
     -- Skip checks during the initial spawn grace period.
     if session.metrics.justSpawned then
@@ -1037,6 +1040,22 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
         session.metrics.lastServerArmor = currentArmor
         session.metrics.lastServerHealthTimestamp = Natives.GetGameTimer()
         return -- Skip validation during grace period.
+    end
+
+    -- If server-side health detection is disabled, just update metrics and return
+    if ServerDetections.health == false then
+        session.metrics.lastServerHealth = currentHealth
+        session.metrics.lastServerArmor = currentArmor
+        session.metrics.lastServerHealthTimestamp = Natives.GetGameTimer()
+        return
+    end
+
+    -- Track cumulative health increases for regen analysis
+    session.metrics.healthIncreaseBuffer = session.metrics.healthIncreaseBuffer or 0
+    if session.metrics.lastServerHealth and currentHealth > session.metrics.lastServerHealth then
+        session.metrics.healthIncreaseBuffer = session.metrics.healthIncreaseBuffer + (currentHealth - session.metrics.lastServerHealth)
+    else
+        session.metrics.healthIncreaseBuffer = 0
     end
 
     -- Load relevant thresholds.

@@ -583,57 +583,6 @@ function RegisterNexusGuardServerEvents()
             return
         end
 
-        -- Access threshold configuration
-        local Thresholds = NexusGuardServer.Config and NexusGuardServer.Config.Thresholds or {}
-        local serverSpeedThreshold = Thresholds.serverSideSpeedThreshold or 0
-        local minTimeDiff = Thresholds.minTimeDiffPositionCheck or 450
-        local spawnGraceMs = (Thresholds.spawnGracePeriod or 5) * 1000
-
-        local serverTime = GetGameTimer()
-
-        -- If server-side speed check is disabled, just update position and return
-        if serverSpeedThreshold <= 0 then
-            session.metrics.lastServerPosition = currentPos
-            session.metrics.lastServerPositionTimestamp = serverTime
-            session.metrics.lastValidPosition = currentPos
-            return
-        end
-
-        -- Handle spawn/respawn grace period
-        if session.metrics.justSpawned then
-            session.metrics.spawnGraceEnd = session.metrics.spawnGraceEnd or (serverTime + spawnGraceMs)
-            if serverTime < session.metrics.spawnGraceEnd then
-                session.metrics.lastServerPosition = currentPos
-                session.metrics.lastServerPositionTimestamp = serverTime
-                session.metrics.lastValidPosition = currentPos
-                return
-            else
-                session.metrics.justSpawned = false
-                session.metrics.spawnGraceEnd = nil
-            end
-        end
-
-        local lastPos = session.metrics.lastServerPosition
-        local lastTimestamp = session.metrics.lastServerPositionTimestamp
-        local computedVerticalVel = 0.0
-        if lastPos and lastTimestamp then
-            local timeDiff = serverTime - lastTimestamp
-            if timeDiff < minTimeDiff then
-                session.metrics.lastServerPosition = currentPos
-                session.metrics.lastServerPositionTimestamp = serverTime
-                return
-            end
-
-            local dz = currentPos.z - lastPos.z
-            computedVerticalVel = dz / (timeDiff / 1000.0)
-        else
-            -- First position update; initialize tracking and skip validation
-            session.metrics.lastServerPosition = currentPos
-            session.metrics.lastServerPositionTimestamp = serverTime
-            session.metrics.lastValidPosition = currentPos
-            return
-        end
-
         -- Mark the session as active
         if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
             NexusGuardServer.Session.UpdateActivity(source)
@@ -660,48 +609,12 @@ function RegisterNexusGuardServerEvents()
             end
         end
 
--- Basic server-side speed check using configured threshold
-local lastPos = session.metrics.lastServerPosition
-local lastTime = session.metrics.lastServerPositionTimestamp
-local currentTime = GetGameTimer()
-if lastPos and lastTime then
-local timeDiff = currentTime - lastTime
-local minDiff = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.minTimeDiffPositionCheck) or 450
-if timeDiff >= minDiff then
-local distance = #(currentPos - lastPos)
-local speed = timeDiff > 0 and (distance / (timeDiff / 1000.0)) or 0.0
-local speedThreshold = NexusGuardServer.Config.serverSideSpeedThreshold or 50.0
-if speed > speedThreshold then
-if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
-NexusGuardServer.Detections.Process(source, "ServerSpeedCheck", {
-speed = speed,
-threshold = speedThreshold,
-distance = distance,
-timeDiff = timeDiff,
-serverValidated = true
-}, session)
-else
-Log(("^1[NexusGuard] Speed %.2f m/s exceeded threshold %.2f for %s (ID: %d)^7"):format(speed, speedThreshold, playerName, source), 1)
-end
-end
-end
-end
--- Update last known position/timestamp for next check
-session.metrics.lastServerPosition = currentPos
-session.metrics.lastServerPositionTimestamp = currentTime
--- Override vertical velocity with calculation based on position delta
-session.metrics.verticalVelocity = computedVerticalVel
-
         -- Call the validation function in the Detections module.
         if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidatePositionUpdate then
             NexusGuardServer.Detections.ValidatePositionUpdate(source, currentPos, clientTimestamp, session)
         else
             Log(("^1[NexusGuard] CRITICAL: Detections.ValidatePositionUpdate function not found in API! Cannot validate position for %s (ID: %d)^7"):format(playerName, source), 1)
         end
-
-        -- Update last known position/timestamp after validation
-        session.metrics.lastServerPosition = currentPos
-        session.metrics.lastServerPositionTimestamp = serverTime
     end)
 
     -- Health Update Handler (Client -> Server)
@@ -741,102 +654,17 @@ session.metrics.verticalVelocity = computedVerticalVel
             end)
         end
 
-        local Thresholds = NexusGuardServer.Config and NexusGuardServer.Config.Thresholds or {}
-        local spawnGraceMs = (Thresholds.spawnGracePeriod or 5) * 1000
-
-        -- Detect respawn by checking health transition
-        local lastHealth = session.metrics.lastServerHealth
-        if lastHealth and lastHealth <= 0 and currentHealth > 0 then
-            session.metrics.justSpawned = true
-            session.metrics.spawnGraceEnd = GetGameTimer() + spawnGraceMs
-            SetTimeout(spawnGraceMs, function()
-                local sess = NexusGuardServer.GetSession(source)
-                if sess and sess.metrics then
-                    sess.metrics.justSpawned = false
-                end
-            end)
-        end
-
         -- Mark the session as active
         if NexusGuardServer.Session and NexusGuardServer.Session.UpdateActivity then
             NexusGuardServer.Session.UpdateActivity(source)
         end
 
--- Server-side armor cap check
-local armorThreshold = NexusGuardServer.Config.serverSideArmorThreshold or 105.0
-if currentArmor > armorThreshold then
-if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
-NexusGuardServer.Detections.Process(source, "ServerArmorCheck", {
-currentArmor = currentArmor,
-threshold = armorThreshold,
-serverValidated = true
-}, session)
-else
-Log(("^1[NexusGuard] Armor value %.1f exceeds threshold %.1f for %s (ID: %d)^7"):format(currentArmor, armorThreshold, playerName, source), 1)
-end
-end
--- Server-side health regeneration check
-local lastHealth = session.metrics.lastServerHealth
-local lastHealthTime = session.metrics.lastServerHealthTimestamp
-local currentTime = GetGameTimer()
-if lastHealth and lastHealthTime then
-local timeDiff = currentTime - lastHealthTime
-if timeDiff > 0 then
-local regenRate = (currentHealth - lastHealth) / (timeDiff / 1000.0)
-local regenThreshold = NexusGuardServer.Config.serverSideRegenThreshold or 3.0
-if regenRate > regenThreshold then
-if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
-NexusGuardServer.Detections.Process(source, "ServerHealthRegenCheck", {
-rate = regenRate,
-increase = currentHealth - lastHealth,
-threshold = regenThreshold,
-timeDiff = timeDiff,
-serverValidated = true
-}, session)
-else
-Log(("^1[NexusGuard] Health regen %.2f HP/s exceeded threshold %.2f for %s (ID: %d)^7"):format(regenRate, regenThreshold, playerName, source), 1)
-end
-end
-end
-end
--- Pre-calculate health/armor deltas to require sustained or larger changes before flagging
-local metrics = session.metrics
-local thresholds = NexusGuardServer.Config and NexusGuardServer.Config.Thresholds or {}
-local armorThreshold = thresholds.serverSideArmorThreshold or 105.0
-metrics.healthIncreaseBuffer = metrics.healthIncreaseBuffer or 0
-metrics.armorOverageCount = metrics.armorOverageCount or 0
-metrics.damageEvents = metrics.damageEvents or {} -- hook for future damage-event correlation
--- Track cumulative health increases since last server check
-if metrics.lastServerHealth and currentHealth > metrics.lastServerHealth then
-metrics.healthIncreaseBuffer = metrics.healthIncreaseBuffer + (currentHealth - metrics.lastServerHealth)
-else
-metrics.healthIncreaseBuffer = 0
-end
--- Track repeated armor values exceeding the configured threshold
-if currentArmor > armorThreshold then
-metrics.armorOverageCount = metrics.armorOverageCount + 1
-else
-metrics.armorOverageCount = 0
-end
--- Call the validation function in the Detections module.
-if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidateHealthUpdate then
-NexusGuardServer.Detections.ValidateHealthUpdate(source, currentHealth, currentArmor, clientTimestamp, session)
-else
-Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Cannot validate health/armor for %s (ID: %d)^7"):format(playerName, source), 1)
-end
--- Update last known health/armor values
-session.metrics.lastServerHealth = currentHealth
-session.metrics.lastServerArmor = currentArmor
-session.metrics.lastServerHealthTimestamp = currentTime
-
-        -- Call the validation function in the Detections module.
+        -- Delegate validation to Detections module
         if NexusGuardServer.Detections and NexusGuardServer.Detections.ValidateHealthUpdate then
             NexusGuardServer.Detections.ValidateHealthUpdate(source, currentHealth, currentArmor, clientTimestamp, session)
         else
-             Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Cannot validate health/armor for %s (ID: %d)^7"):format(playerName, source), 1)
+            Log(("^1[NexusGuard] CRITICAL: Detections.ValidateHealthUpdate function not found in API! Cannot validate health/armor for %s (ID: %d)^7"):format(playerName, source), 1)
         end
-
-        session.metrics.lastServerHealth = currentHealth
     end)
 
     -- Weapon Clip Size Check Handler (Client -> Server)

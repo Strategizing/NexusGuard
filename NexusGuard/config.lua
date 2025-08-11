@@ -66,6 +66,13 @@ Config.Thresholds = {
     fallingSpeedMultiplier = 1.5 -- Allow higher speeds when falling
 }
 
+-- Server-Side Detection Toggles
+Config.ServerDetections = {
+    speed = true,     -- Validate player speed server-side
+    teleport = true,  -- Validate large position jumps server-side
+    health = true     -- Validate health/armor changes server-side
+}
+
 -- Server-Side Explosion Checks Configuration
 Config.ExplosionChecks = {
     enabled = true, -- Enable server-side explosion checks
@@ -87,8 +94,10 @@ Config.ExplosionChecks = {
 Config.SeverityScores = {
     -- Server-Side Validated Detections
     ServerSpeedCheck = 10,
+    ServerTeleportCheck = 10,
     ServerHealthRegenCheck = 15,
     ServerArmorCheck = 5,
+    ServerGodModeCheck = 15,
     ServerWeaponClipCheck = 8,
     BlacklistedExplosion = 25, -- High impact as it's explicitly disallowed
     ExplosionSpam = 12,
@@ -97,10 +106,7 @@ Config.SeverityScores = {
     -- Client-Side Detections (Generally lower confidence unless tuned)
     menuDetection = 5, -- Low impact due to unreliability of keybind checks
     noclip = 15, -- Moderate impact, but prone to false positives without server validation
-    godMode = 10, -- Client-side flags can be spoofed, server validation is key
     weaponModification = 7, -- Client-side damage/clip checks are less reliable
-    speedHack = 5, -- Client-side speed check is less reliable than server's
-    teleporting = 5, -- Client-side teleport check is less reliable than server's
 
     -- Add other detection types reported by client/server detectors here
     -- e.g., freecam = 3, vehicleModification = 8, etc.
@@ -143,8 +149,6 @@ Config.WeaponBaseClipSize = { -- Base Clip Size (integer)
 -- These flags enable/disable the *client-side* detector modules.
 -- Server-side checks (like speed, health, weapon validation) run based on received events, not these flags.
 Config.Detectors = {
-    godMode = true,
-    speedHack = true,
     weaponModification = true,
     resourceInjection = true,
     explosionSpamming = true,
@@ -152,7 +156,6 @@ Config.Detectors = {
     entitySpawning = true,
     noclip = true,
     freecam = true,
-    teleporting = true,
     menuDetection = true,
     vehicleModification = true,
     -- resourceInjection = true, -- Note: Client-side resource injection detection is complex and often unreliable. Focus on server-side verification.
