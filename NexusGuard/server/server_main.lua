@@ -294,7 +294,7 @@ function RegisterNexusGuardServerEvents()
             ClientsLoaded[source] = true -- Mark client as having initiated the handshake.
             -- Generate a security token using the Security module via API.
             local tokenData = NexusGuardServer.Security and NexusGuardServer.Security.GenerateToken and NexusGuardServer.Security.GenerateToken(source)
-            if tokenData then
+            if tokenData and tokenData.nonce then
                 -- Send the generated token data back to the requesting client.
                 EventRegistry:TriggerClientEvent('SECURITY_RECEIVE_TOKEN', source, tokenData)
                 Log(("^2[NexusGuard]^7 Secure token sent to %s (ID: %d) via event '%s'^7"):format(playerName, source, EventRegistry:GetEventName('SECURITY_RECEIVE_TOKEN')), 2)
