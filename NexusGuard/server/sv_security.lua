@@ -27,7 +27,7 @@ local Dependencies = require('shared/dependency_manager') -- Load the dependency
 local Log -- Local alias for Log, set during Initialize
 
 -- Local reference to the Config table, set during Initialize
-local Config = nil
+local Config, Core = nil, nil
 
 local Security = {
     -- Anti-Replay Cache: Stores recently validated token signatures and their expiry times.
@@ -63,9 +63,10 @@ local Security = {
     @param cfg (table): The main Config table.
     @param logFunc (function): The logging function (Utils.Log).
 ]]
-function Security.Initialize(cfg, logFunc)
+function Security.Initialize(cfg, logFunc, core)
     Config = cfg or {} -- Store config reference
     Log = logFunc or function(...) print("[Security Fallback Log]", ...) end -- Store log function reference
+    Core = core
 
     -- Validate security secret early to prevent insecure startup
     local secret = Config.SecuritySecret
@@ -351,8 +352,8 @@ function Security.ValidateEventSource(source, requireSession)
         -- Try to access the global NexusGuardServer table safely
         local hasSession = false
         local success, result = pcall(function()
-            if _G.NexusGuardServer and type(_G.NexusGuardServer.GetSession) == "function" then
-                local session = _G.NexusGuardServer.GetSession(source)
+            if Core and type(Core.GetSession) == "function" then
+                local session = Core.GetSession(source)
                 return session ~= nil
             end
             return false

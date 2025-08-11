@@ -30,11 +30,13 @@ server_scripts {
     'server/sv_event_proxy.lua',
     'server/sv_session.lua',        -- Load session management module
     'server/sv_bans.lua',
+    'server/sv_playermetrics.lua',
+    'server/sv_detections.lua',
     'server/sv_database.lua',       -- Load database module
     'server/sv_discord.lua',        -- Load Discord module
     'server/sv_event_handlers.lua', -- Load event handlers module
-    'server/modules/*.lua',         -- Load other modules (like detections)
-    'globals.lua',                  -- Load globals to define API table (after modules are available)
+    'server/modules/*.lua',         -- Load remaining modules
+    'server/sv_api.lua',            -- API export
     'server/server_main.lua'        -- Load main server logic last
 }
 
@@ -45,5 +47,5 @@ dependency {
 }
 
 export {
-    'GetNexusGuardServerAPI' -- Export the correct function name from globals.lua
+    'GetNexusGuardServerAPI' -- Export server API table
 }

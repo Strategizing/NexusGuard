@@ -17,11 +17,11 @@
     - Advanced pattern recognition for detecting sophisticated cheats
 
     Dependencies:
-    - Global `NexusGuardServer` API table (for Config, Utils, Bans, Discord)
+    - Injected Config and Core references (for Utils, Bans, Discord)
     - `ox_lib` resource (for `lib.json`)
 
     Usage:
-    - Required by `globals.lua` and exposed via the `NexusGuardServer.Detections` API table
+    - Initialized via `Core.LoadModules` and exposed through the server API
     - The `Process` function is the main entry point, called by event handlers in `server_main.lua`
       or potentially other server-side checks
 ]]
@@ -83,36 +83,15 @@ local Detections = {
 local Natives = require('shared/natives')                 -- Load the natives wrapper
 local Dependencies = require('shared/dependency_manager') -- Load the dependency manager
 local ModuleLoader = require('shared/module_loader')      -- Load the module loader
--- Attempt to get the NexusGuard Server API from globals.lua. Use pcall for safety.
-local successAPI, NexusGuardServer = pcall(function()
-    if _G.NexusGuardServer then
-        return _G.NexusGuardServer
-    elseif _G.exports and _G.exports['NexusGuard'] and _G.exports['NexusGuard'].GetNexusGuardServerAPI then
-        return _G.exports['NexusGuard']:GetNexusGuardServerAPI()
-    end
-    return nil
-end)
-if not successAPI or not NexusGuardServer then
-    print("^1[NexusGuard Detections] CRITICAL: Failed to get NexusGuardServer API. Detections module will not function.^7")
-    -- Create dummy API to prevent immediate errors, although functionality will be broken.
-    NexusGuardServer = {
-        Config = { Thresholds = {}, Severity = {}, Actions = {} },
-        Utils = { Log = function(...) print("[NexusGuard Detections Fallback Log]", ...) end },
-        Bans = {}, Discord = {}
-    }
-end
 
--- Local alias for the logging function.
-local Log = function(...)
-    if NexusGuardServer and NexusGuardServer.Utils and type(NexusGuardServer.Utils.Log) == "function" then
-        NexusGuardServer.Utils.Log(...)
-    else
-        print("[NexusGuard Detections Fallback Log]", ...)
-    end
-end
+local Config, Log, Core
 
--- Initialize the dependency manager
-Dependencies.Initialize(Log)
+function Detections.Initialize(cfg, logFunc, core)
+    Config = cfg or {}
+    Log = logFunc or function(...) print('[Detections]', ...) end
+    Core = core
+    Dependencies.Initialize(Log)
+end
 
 --[[
     Validates the basic structure of incoming detection data.
@@ -153,8 +132,8 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
     local reason = validatedData.reason or "No specific reason provided."
     local details = validatedData.details or {}
     -- Determine trust score impact based on severity config, with defaults.
-    local trustImpact = (NexusGuardServer.Config.Severity and NexusGuardServer.Config.Severity[detectionType]) or
-                        (NexusGuardServer.Config.Severity and NexusGuardServer.Config.Severity.default) or 5
+    local trustImpact = (Config.Severity and Config.Severity[detectionType]) or
+                        (Config.Severity and Config.Severity.default) or 5
 
     -- Ensure JSON encoding is safe for logging details.
     local detailsJson = "error encoding"
@@ -189,34 +168,32 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
             timestamp = os.time()
         })
         -- Also store in database if configured
-        if NexusGuardServer.Detections and NexusGuardServer.Detections.Store then
-            NexusGuardServer.Detections.Store(playerId, detectionType, validatedData)
+        if Detections.Store then
+            Detections.Store(playerId, detectionType, validatedData)
         end
     else
          Log(("^1Detections Penalty Warning: Cannot apply trust score penalty or store detection for %s (ID: %d) - session or metrics missing.^7"):format(playerName, playerId), 1)
     end
 
     -- Send Discord Notification via Discord module API.
-    if NexusGuardServer.Discord and NexusGuardServer.Discord.Send then
-        -- Prepare data for embed fields
+    local Discord = Core and Core.GetModule and Core.GetModule('Discord')
+    if Discord and Discord.Send then
         local embedData = {
             { name = "Player", value = string.format("%s (`%d`)", playerName, playerId), inline = true },
             { name = "Detection", value = detectionType, inline = true },
             { name = "Severity", value = severity, inline = true },
             { name = "Reason", value = reason, inline = false },
-            { name = "Details", value = string.format("```json\n%s\n```", detailsJson), inline = false }, -- Use code block for JSON
+            { name = "Details", value = string.format("```json\n%s\n```", detailsJson), inline = false },
             { name = "Trust Score", value = string.format("%.1f (`-%d`)", session and session.metrics and session.metrics.trustScore or -1.0, trustImpact), inline = true }
         }
-        -- Determine the correct webhook URL (category-specific or general).
-        local webhook = NexusGuardServer.Config.Discord and NexusGuardServer.Config.Discord.webhooks and NexusGuardServer.Config.Discord.webhooks.detections
-        -- Pass the embedData table instead of the formatted string
-        NexusGuardServer.Discord.Send("detections", "Suspicious Activity Detected", embedData, webhook)
+        local webhook = Config.Discord and Config.Discord.webhooks and Config.Discord.webhooks.detections
+        Discord.Send("detections", "Suspicious Activity Detected", embedData, webhook)
     end
 
     -- Execute Actions (Ban/Kick) based on trust score thresholds defined in config.
     -- TODO: Implement more sophisticated progressive banning logic (e.g., based on frequency/severity of recent detections).
-    local actionConfig = (NexusGuardServer.Config.Actions and NexusGuardServer.Config.Actions[detectionType]) or
-                         (NexusGuardServer.Config.Actions and NexusGuardServer.Config.Actions.default) or
+    local actionConfig = (Config.Actions and Config.Actions[detectionType]) or
+                         (Config.Actions and Config.Actions.default) or
                          { kickThreshold = 50, banThreshold = 20 } -- Default thresholds if not configured.
     local currentTrust = (session and session.metrics and session.metrics.trustScore) or 100.0 -- Default to 100 if unavailable.
 
@@ -226,9 +203,10 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
             currentTrust, actionConfig.banThreshold, detectionType, playerName, playerId
         ), 1)
         -- Execute ban via Bans module API.
-        if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
+        local Bans = Core and Core.GetModule and Core.GetModule('Bans')
+        if Bans and Bans.Execute then
             local banReason = ("Automatic ban: Triggered %s (Trust Score: %.1f)"):format(detectionType, currentTrust)
-            NexusGuardServer.Bans.Execute(playerId, banReason, "NexusGuard System") -- Default to permanent ban.
+            Bans.Execute(playerId, banReason, "NexusGuard System") -- Default to permanent ban.
         else
              Log("^1Detections Action Error: Bans.Execute function missing from API. Cannot ban player. Kicking as fallback.^7", 1)
             Natives.DropPlayer(playerId, "Kicked by Anti-Cheat (System Error: Ban Function Missing)")
@@ -256,7 +234,7 @@ end
 ]]
 function Detections.Process(playerId, detectionType, detectionData, session)
     -- Ensure essential components are loaded.
-    if not NexusGuardServer or not Log then print("^1[NexusGuard Detections] CRITICAL: NexusGuardServer API or Log function not available. Cannot process detection.^7"); return false end
+    if not Config or not Log then print("^1[NexusGuard Detections] CRITICAL: Config or Log function not available. Cannot process detection.^7"); return false end
 
     local playerName = Natives.GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
     Log(("^3Detections: Processing report for player %s (ID: %d), Type: %s^7"):format(playerName, playerId, detectionType), 3)
@@ -277,10 +255,10 @@ function Detections.Process(playerId, detectionType, detectionData, session)
         return false
     end
 
-    -- Access config tables via the API object for convenience.
-    local Config = NexusGuardServer.Config
-    local Thresholds = Config.Thresholds or {}
-    local Features = Config.Features or {}
+    -- Access config tables for convenience.
+    local cfg = Config
+    local Thresholds = cfg.Thresholds or {}
+    local Features = cfg.Features or {}
 
     -- --- Specific Detection Type Validation Logic ---
     -- Use 'elseif' structure to handle different detection types.
@@ -769,9 +747,9 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
         return
     end
 
-    -- Access config tables via the API object for convenience.
-    local Config = NexusGuardServer.Config
-    local Thresholds = Config.Thresholds or {}
+    -- Access config tables for convenience.
+    local cfg = Config
+    local Thresholds = cfg.Thresholds or {}
 
     -- Update player state if not already done in server_main
     if not session.metrics.stateUpdated then
@@ -837,8 +815,9 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
                 local isLegitTeleport = false
 
                 -- Check if player has admin permissions (might be a legitimate admin teleport)
-                if NexusGuardServer and NexusGuardServer.Permissions and NexusGuardServer.Permissions.IsAdmin then
-                    isLegitTeleport = NexusGuardServer.Permissions.IsAdmin(playerId)
+                local Permissions = Core and Core.GetModule and Core.GetModule('Permissions')
+                if Permissions and Permissions.IsAdmin then
+                    isLegitTeleport = Permissions.IsAdmin(playerId)
                 end
 
                 -- If not a legitimate teleport, flag as suspicious
@@ -960,7 +939,7 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
                             -- Use async raycast with a small wait (not ideal but better than sync)
                             local rayHandle = Natives.StartShapeTestRay(rayStart.x, rayStart.y, rayStart.z, rayEnd.x,
                                 rayEnd.y, rayEnd.z, 1, sourcePed, 0)
-                            if _G.Citizen then _G.Citizen.Wait(50) end -- Small wait for raycast to complete
+                            if Citizen then Citizen.Wait(50) end -- Small wait for raycast to complete
                             local retval, hit, endCoords, surfaceNormal, entityHit = Natives.GetShapeTestResult(
                                 rayHandle)
 
@@ -1026,9 +1005,9 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
         return
     end
 
-    -- Access config tables via the API object for convenience.
-    local Config = NexusGuardServer.Config
-    local Thresholds = Config.Thresholds or {}
+    -- Access config tables for convenience.
+    local cfg = Config
+    local Thresholds = cfg.Thresholds or {}
 
     -- Skip checks during the initial spawn grace period.
     if session.metrics.justSpawned then
@@ -1290,7 +1269,7 @@ end
 ]]
 function Detections.TrackDamageEvent(playerId, damageAmount, weaponHash, attacker)
     -- Get the player's session
-    local session = NexusGuardServer.Core.GetSession(playerId)
+    local session = Core.GetSession(playerId)
     if not session or not session.metrics then return end
 
     -- Initialize damage events array if it doesn't exist
@@ -1406,9 +1385,9 @@ function Detections.CalculateSeverity(playerId, detectionType, baseConfidence, s
     local confidence = baseConfidence or Detections.confidenceLevels.MEDIUM
 
     -- Get config severity scores
-    local Config = NexusGuardServer.Config
-    local severityScore = (Config.SeverityScores and Config.SeverityScores[detectionType]) or
-                          (Config.SeverityScores and Config.SeverityScores.default) or 5
+    local cfg = Config
+    local severityScore = (cfg.SeverityScores and cfg.SeverityScores[detectionType]) or
+                          (cfg.SeverityScores and cfg.SeverityScores.default) or 5
 
     -- Adjust based on detection history
     local historyFactor = 1.0
@@ -1484,8 +1463,8 @@ function Detections.DetermineResponse(playerId, detectionType, severity, session
     local response = "log"
 
     -- Get config action settings
-    local Config = NexusGuardServer.Config
-    local Actions = Config.Actions or {}
+    local cfg = Config
+    local Actions = cfg.Actions or {}
 
     -- Get trust score if available
     local trustScore = (session and session.metrics and session.metrics.trustScore) or 100

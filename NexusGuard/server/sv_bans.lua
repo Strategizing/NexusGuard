@@ -19,6 +19,8 @@ local Utils = require('server/sv_utils')
 local Log = Utils.Log
 local FormatDuration = Utils.FormatDuration
 
+local Config, Core
+
 local Bans = {
     BanCache = {},        -- In-memory cache of active ban records loaded from the database.
     BanCacheExpiry = 0,   -- Timestamp (os.time) when the cache expires and needs reloading.
@@ -32,10 +34,17 @@ local Bans = {
 
     @param forceReload (boolean, optional): If true, bypasses the cache expiry check and forces a reload.
 ]]
+function Bans.Initialize(cfg, logFunc, core)
+    Config = cfg or {}
+    Log = logFunc or Log
+    Core = core
+    Bans.BanCacheDuration = Config.BanCacheDuration or Bans.BanCacheDuration
+end
+
 function Bans.LoadList(forceReload)
-    -- Access global Config for database and cache settings.
-    local dbConfig = _G.Config and _G.Config.Database
-    local banCacheDuration = (_G.Config and _G.Config.BanCacheDuration) or Bans.BanCacheDuration -- Use configured or default duration.
+    -- Access config for database and cache settings.
+    local dbConfig = Config and Config.Database
+    local banCacheDuration = (Config and Config.BanCacheDuration) or Bans.BanCacheDuration -- Use configured or default duration.
 
     -- Exit if database is disabled in config.
     if not dbConfig or not dbConfig.enabled then return end
@@ -82,7 +91,7 @@ end
                                      otherwise returns `false` and `nil`.
 ]]
 function Bans.IsPlayerBanned(license, ip, discordId)
-    local dbConfig = _G.Config and _G.Config.Database
+    local dbConfig = Config and Config.Database
 
     -- Reload cache if database is enabled and cache has expired.
     if dbConfig and dbConfig.enabled and Bans.BanCacheExpiry <= os.time() then
@@ -122,7 +131,7 @@ end
         - durationSeconds (number, optional): Duration of the ban in seconds (0 or nil for permanent).
 ]]
 function Bans.Store(banData)
-    local dbConfig = _G.Config and _G.Config.Database
+    local dbConfig = Config and Config.Database
     -- Exit if database is disabled.
     if not dbConfig or not dbConfig.enabled then Log("Bans Info: Attempted to store ban while Database is disabled in config.", 3); return end
     -- Ensure oxmysql is available.
@@ -213,7 +222,7 @@ function Bans.Execute(playerId, reason, adminName, durationSeconds)
     Bans.Store(banData)
 
     -- Construct the ban message shown to the player.
-    local banMessage = (_G.Config and _G.Config.BanMessage) or "You have been banned from this server."
+    local banMessage = (Config and Config.BanMessage) or "You have been banned from this server."
     if durationSeconds and durationSeconds > 0 then
         banMessage = banMessage .. " Duration: " .. FormatDuration(durationSeconds) -- Add duration if temporary.
     end
@@ -223,8 +232,7 @@ function Bans.Execute(playerId, reason, adminName, durationSeconds)
     Log(("^1Bans: Executed ban on player: %s (ID: %d). Reason: %s. Duration: %s^7"):format(playerName, source, banData.reason, FormatDuration(durationSeconds)), 1)
 
     -- Send Discord notification if configured.
-    -- Access the Discord module via the global API table (assuming it's populated in globals.lua).
-    local Discord = _G.NexusGuardServer and _G.NexusGuardServer.Discord
+    local Discord = Core and Core.GetModule and Core.GetModule('Discord')
     if Discord and Discord.Send then
         local discordMsg = string.format(
             "**Player Banned**\n**Name:** %s (`%d`)\n**License:** `%s`\n**IP:** `%s`\n**Discord:** `%s`\n**Reason:** %s\n**Admin:** %s",
@@ -235,9 +243,8 @@ function Bans.Execute(playerId, reason, adminName, durationSeconds)
         else
             discordMsg = discordMsg .. "\n**Duration:** Permanent"
         end
-        -- Get the specific webhook URL for bans from config.
-        local webhook = (_G.Config and _G.Config.Discord and _G.Config.Discord.webhooks and _G.Config.Discord.webhooks.bans)
-        Discord.Send("Bans", "Player Banned", discordMsg, webhook) -- Use category "Bans" and the message.
+        local webhook = (Config and Config.Discord and Config.Discord.webhooks and Config.Discord.webhooks.bans)
+        Discord.Send("Bans", "Player Banned", discordMsg, webhook)
     end
 end
 
@@ -253,7 +260,7 @@ end
                                Does *not* reflect the actual success of the database operation itself due to async nature.
 ]]
 function Bans.Unban(identifierType, identifierValue, adminName)
-    local dbConfig = _G.Config and _G.Config.Database
+    local dbConfig = Config and Config.Database
     -- Check prerequisites.
     if not dbConfig or not dbConfig.enabled then return false, "Database is disabled in config." end
     if not MySQL then Log("^1Bans Error: MySQL object not found. Cannot unban.^7", 1); return false, "Database connection error (oxmysql not found)." end
@@ -281,9 +288,9 @@ function Bans.Unban(identifierType, identifierValue, adminName)
             Log(("Bans: Successfully unbanned identifier '%s' = '%s'. Rows affected: %d. Initiated by: %s^7"):format(fieldName, identifierValue, result.affectedRows, adminName or "System"), 2)
             Bans.LoadList(true) -- Force reload the ban cache after successful unban.
             -- Optionally notify Discord.
-            local Discord = _G.NexusGuardServer and _G.NexusGuardServer.Discord
+            local Discord = Core and Core.GetModule and Core.GetModule('Discord')
             if Discord and Discord.Send then
-                local webhook = (_G.Config and _G.Config.Discord and _G.Config.Discord.webhooks and _G.Config.Discord.webhooks.bans)
+                local webhook = (Config and Config.Discord and Config.Discord.webhooks and Config.Discord.webhooks.bans)
                 Discord.Send("Bans", "Identifier Unbanned",
                     ("Identifier **%s:** `%s` was unbanned by **%s**."):format(fieldName, identifierValue, adminName or "System"),
                     webhook)
