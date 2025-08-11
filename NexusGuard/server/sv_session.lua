@@ -112,6 +112,7 @@ local function CreateSession(playerId)
             trustScore = 100.0,
             warningCount = 0,
             detections = {},
+            detectionCounts = {},
 
             -- Health and movement tracking
             healthHistory = {},

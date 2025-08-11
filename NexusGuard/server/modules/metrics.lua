@@ -13,6 +13,7 @@ function Metrics.InitializePlayer(playerId)
         },
         weapons = {},            -- Track weapon inventory
         detections = {},         -- Track detection history
+        detectionCounts = {},    -- Track repeat detections
         trustScore = 100,        -- Start with full trust
         lastSpawn = os.time(),   -- Track spawns for grace periods
         state = {                -- Track player state for context-aware checks

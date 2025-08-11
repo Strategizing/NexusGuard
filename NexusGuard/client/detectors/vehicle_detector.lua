@@ -212,20 +212,24 @@ function Detector.Check()
             vehicleName = GetLabelText(displayNameHash) or displayNameHash -- Use label text or hash if label fails.
         end
 
-        local details = {
-            reason = "Vehicle speed potentially exceeds calculated maximum",
-            speed = math.floor(currentSpeedKmh),
-            maxAllowed = math.floor(maxAllowedSpeedKmh),
-            vehicleName = vehicleName,
-            vehicleModel = vehicleModel, -- Include model hash
-            vehicleClass = vehicleClass
+        local detectionData = {
+            type = DetectorName,
+            detectedValue = math.floor(currentSpeedKmh),
+            baselineValue = math.floor(maxAllowedSpeedKmh),
+            serverValidated = false,
+            context = {
+                reason = "Vehicle speed potentially exceeds calculated maximum",
+                vehicleName = vehicleName,
+                vehicleModel = vehicleModel,
+                vehicleClass = vehicleClass
+            }
         }
         -- Report this potential issue to the server.
         if NexusGuard.ReportCheat then
             Log(("[%s Detector] Reporting potential speed issue: Speed %.0f km/h > Max %.0f km/h for %s"):format(
-                DetectorName, details.speed, details.maxAllowed, details.vehicleName
+                DetectorName, detectionData.detectedValue, detectionData.baselineValue, vehicleName
             ), 1)
-            NexusGuard:ReportCheat(DetectorName, details)
+            NexusGuard:ReportCheat(DetectorName, detectionData)
             -- Consider returning a suspicion score for adaptive timing if needed.
         end
     end
@@ -234,17 +238,19 @@ function Detector.Check()
     -- Also check if the vehicle is actually damaged, as health might be high on a pristine vehicle briefly.
     local healthThreshold = 1000.0 -- Standard max engine health.
     if currentEngineHealth > healthThreshold and IsVehicleDamaged(vehicle) then -- Check only if damaged AND health > 1000
-         local details = {
-            reason = "Vehicle engine health modification detected",
-            health = math.floor(currentEngineHealth),
-            threshold = healthThreshold
+         local detectionData = {
+            type = DetectorName,
+            detectedValue = math.floor(currentEngineHealth),
+            baselineValue = healthThreshold,
+            serverValidated = false,
+            context = { reason = "Vehicle engine health modification detected" }
          }
          -- Report this potential issue to the server.
         if NexusGuard.ReportCheat then
             Log(("[%s Detector] Reporting potential health issue: Health %.0f > Threshold %.0f"):format(
-                DetectorName, details.health, details.threshold
+                DetectorName, detectionData.detectedValue, detectionData.baselineValue
             ), 1)
-            NexusGuard:ReportCheat(DetectorName, details)
+            NexusGuard:ReportCheat(DetectorName, detectionData)
             -- Consider returning a suspicion score for adaptive timing if needed.
         end
     end

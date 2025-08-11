@@ -244,16 +244,18 @@ function NetworkMonitor.ReportSuspiciousSequence(playerId, sequence, count)
         session = NexusGuardServer.GetPlayerSession(playerId)
     end
 
+    local thresholds = NetworkMonitor.GetThresholds()
     -- Prepare detection data
     local detectionData = {
-        value = count,
-        details = {
+        type = "SuspiciousEventSequence",
+        detectedValue = count,
+        baselineValue = thresholds.suspiciousSequenceThreshold,
+        serverValidated = true,
+        context = {
             sequence = sequence,
             count = count,
             sequenceString = table.concat(sequence, ",")
-        },
-        clientValidated = false,  -- This is a server-side detection
-        serverValidated = true
+        }
     }
 
     -- Report the detection using the Detections module
@@ -350,15 +352,16 @@ function NetworkMonitor.TrackEvent(playerId, eventName, resourceName)
     if playerData.events[eventName] > thresholds.eventSpamLimit then
         -- Prepare detection data
         local detectionData = {
-            value = playerData.events[eventName],
-            details = {
+            type = "EventSpam",
+            detectedValue = playerData.events[eventName],
+            baselineValue = thresholds.eventSpamLimit,
+            serverValidated = true,
+            context = {
                 eventName = eventName,
                 count = playerData.events[eventName],
                 timeframe = currentTime - playerData.lastReset,
                 resourceName = resourceName
-            },
-            clientValidated = false,
-            serverValidated = true
+            }
         }
 
         -- Report the detection
@@ -379,14 +382,15 @@ function NetworkMonitor.TrackEvent(playerId, eventName, resourceName)
     if playerData.totalEvents > thresholds.playerEventLimit then
         -- Prepare detection data
         local detectionData = {
-            value = playerData.totalEvents,
-            details = {
+            type = "TotalEventSpam",
+            detectedValue = playerData.totalEvents,
+            baselineValue = thresholds.playerEventLimit,
+            serverValidated = true,
+            context = {
                 totalEvents = playerData.totalEvents,
                 timeframe = currentTime - playerData.lastReset,
                 topEvents = NetworkMonitor.GetTopEvents(playerId, 5)
-            },
-            clientValidated = false,
-            serverValidated = true
+            }
         }
 
         -- Report the detection

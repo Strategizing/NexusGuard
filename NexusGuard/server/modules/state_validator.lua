@@ -527,10 +527,11 @@ function StateValidator.ReportDetection(playerId, detectionType, details, severi
 
     -- Prepare detection data
     local detectionData = {
-        value = details.value or 0,
-        details = details,
-        clientValidated = false,  -- This is a server-side detection
-        serverValidated = true
+        type = detectionType,
+        detectedValue = details.value or 0,
+        baselineValue = details.baseline or 0,
+        serverValidated = true,
+        context = details
     }
 
     -- Report the detection using the Detections module

@@ -86,12 +86,12 @@ function EventHandlers.HandleExplosion(sender, ev, session)
 
         -- Process this as a detection event via the Detections API.
         if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
-            -- Normalize detection data structure
             NexusGuardServer.Detections.Process(source, "BlacklistedExplosion", {
-                value = explosionType,
-                details = { type = explosionType, position = position },
-                clientValidated = false,
-                serverValidated = true
+                type = "BlacklistedExplosion",
+                detectedValue = explosionType,
+                baselineValue = 0,
+                serverValidated = true,
+                context = { type = explosionType, position = position }
             }, session)
         else Log("^1[NexusGuard EH] Detections.Process API function not found! Cannot process BlacklistedExplosion detection.^7", 1) end
 
@@ -152,17 +152,18 @@ function EventHandlers.HandleExplosion(sender, ev, session)
         -- Process this as an "ExplosionSpam" detection event via the Detections API.
         if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
             NexusGuardServer.Detections.Process(source, "ExplosionSpam", {
-                value = recentCount,
-                details = {
+                type = "ExplosionSpam",
+                detectedValue = recentCount,
+                baselineValue = spamCountThreshold,
+                serverValidated = true,
+                context = {
                     count = recentCount,
                     period = spamTimeWindow,
                     areaCount = spamInAreaCount,
                     areaDistance = spamDistanceThreshold,
                     lastType = explosionType,
                     lastPosition = position
-                },
-                clientValidated = false,
-                serverValidated = true
+                }
             }, session) -- Pass the full session object.
         else Log("^1[NexusGuard EH] Detections.Process API function not found! Cannot process ExplosionSpam detection.^7", 1) end
     end

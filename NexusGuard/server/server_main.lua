@@ -342,13 +342,22 @@ function RegisterNexusGuardServerEvents()
 
         -- Normalize detection data before processing
         if type(detectionData) ~= "table" then
-            detectionData = { value = detectionData, details = {}, clientValidated = true, serverValidated = false }
+            detectionData = {
+                type = detectionType,
+                detectedValue = detectionData,
+                baselineValue = nil,
+                serverValidated = false,
+                context = {},
+                clientValidated = true
+            }
         else
             detectionData = {
-                value = detectionData.value,
-                details = detectionData.details or detectionData,
-                clientValidated = true,
-                serverValidated = detectionData.serverValidated or false
+                type = detectionData.type or detectionType,
+                detectedValue = detectionData.detectedValue or detectionData.value,
+                baselineValue = detectionData.baselineValue or detectionData.threshold,
+                serverValidated = detectionData.serverValidated or false,
+                context = detectionData.context or detectionData.details or {},
+                clientValidated = detectionData.clientValidated ~= false
             }
         end
 
@@ -445,10 +454,11 @@ function RegisterNexusGuardServerEvents()
                 local session = NexusGuardServer.GetSession(source) -- Get session via API
                 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
                     NexusGuardServer.Detections.Process(source, "ResourceMismatch", {
-                        value = #MismatchedResources,
-                        details = { mismatched = MismatchedResources, mode = checkMode },
-                        clientValidated = false,
-                        serverValidated = true
+                        type = "ResourceMismatch",
+                        detectedValue = #MismatchedResources,
+                        baselineValue = 0,
+                        serverValidated = true,
+                        context = { mismatched = MismatchedResources, mode = checkMode }
                     }, session)
                 end
                 -- Ban or kick based on config.
@@ -674,11 +684,11 @@ local speedThreshold = NexusGuardServer.Config.serverSideSpeedThreshold or 50.0
 if speed > speedThreshold then
 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
 NexusGuardServer.Detections.Process(source, "ServerSpeedCheck", {
-speed = speed,
-threshold = speedThreshold,
-distance = distance,
-timeDiff = timeDiff,
-serverValidated = true
+    type = "ServerSpeedCheck",
+    detectedValue = speed,
+    baselineValue = speedThreshold,
+    serverValidated = true,
+    context = { distance = distance, timeDiff = timeDiff }
 }, session)
 else
 Log(("^1[NexusGuard] Speed %.2f m/s exceeded threshold %.2f for %s (ID: %d)^7"):format(speed, speedThreshold, playerName, source), 1)
@@ -767,9 +777,11 @@ local armorThreshold = NexusGuardServer.Config.serverSideArmorThreshold or 105.0
 if currentArmor > armorThreshold then
 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
 NexusGuardServer.Detections.Process(source, "ServerArmorCheck", {
-currentArmor = currentArmor,
-threshold = armorThreshold,
-serverValidated = true
+    type = "ServerArmorCheck",
+    detectedValue = currentArmor,
+    baselineValue = armorThreshold,
+    serverValidated = true,
+    context = {}
 }, session)
 else
 Log(("^1[NexusGuard] Armor value %.1f exceeds threshold %.1f for %s (ID: %d)^7"):format(currentArmor, armorThreshold, playerName, source), 1)
@@ -787,11 +799,11 @@ local regenThreshold = NexusGuardServer.Config.serverSideRegenThreshold or 3.0
 if regenRate > regenThreshold then
 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
 NexusGuardServer.Detections.Process(source, "ServerHealthRegenCheck", {
-rate = regenRate,
-increase = currentHealth - lastHealth,
-threshold = regenThreshold,
-timeDiff = timeDiff,
-serverValidated = true
+    type = "ServerHealthRegenCheck",
+    detectedValue = regenRate,
+    baselineValue = regenThreshold,
+    serverValidated = true,
+    context = { increase = currentHealth - lastHealth, timeDiff = timeDiff }
 }, session)
 else
 Log(("^1[NexusGuard] Health regen %.2f HP/s exceeded threshold %.2f for %s (ID: %d)^7"):format(regenRate, regenThreshold, playerName, source), 1)
@@ -881,15 +893,16 @@ session.metrics.lastServerHealthTimestamp = currentTime
                 -- Process as a detection event.
                 if NexusGuardServer.Detections.Process then
                     NexusGuardServer.Detections.Process(source, "ServerWeaponClipCheck", {
-                        value = clipCount,
-                        details = {
+                        type = "ServerWeaponClipCheck",
+                        detectedValue = clipCount,
+                        baselineValue = maxAllowedClip,
+                        serverValidated = true,
+                        context = {
                             weaponHash = weaponHash,
                             reportedClip = clipCount,
                             baseClip = baseClipSize,
                             maxAllowed = maxAllowedClip
-                        },
-                        clientValidated = false,
-                        serverValidated = true
+                        }
                     }, session)
                 end
             end

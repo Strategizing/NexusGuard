@@ -110,13 +110,17 @@ function Detector.Check()
         if trigger then
             Log(("[%s Detector] Potential menu keybind pressed: %s"):format(DetectorName, combo.name), 1)
             if NexusGuard.ReportCheat then
-                local details = {
-                    keyCombo = combo.name,
-                    controlJustPressed = combo.justPressed,
-                    controlPressed = combo.pressed -- Will be nil for single key presses
+                local detectionData = {
+                    type = DetectorName,
+                    detectedValue = combo.name,
+                    baselineValue = nil,
+                    serverValidated = false,
+                    context = {
+                        controlJustPressed = combo.justPressed,
+                        controlPressed = combo.pressed
+                    }
                 }
-                -- Report with details. Server-side validation is minimal for this type.
-                NexusGuard:ReportCheat(DetectorName, details)
+                NexusGuard:ReportCheat(DetectorName, detectionData)
             end
             -- Return a small suspicion score to trigger adaptive timing.
             return 1

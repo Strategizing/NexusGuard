@@ -121,16 +121,26 @@ Dependencies.Initialize(Log)
     @param detectionData (any): The raw data received with the detection report.
     @return (table): A validated table structure, potentially wrapping non-table input.
 ]]
-local function ValidateDetectionData(detectionData)
+local function ValidateDetectionData(detectionData, detectionType)
     if type(detectionData) ~= "table" then
         Log(("^1Detections Validation Warning: Received non-table detection data (%s). Wrapping it.^7"):format(type(detectionData)), 1)
-        -- Wrap non-table data for consistency, assume client validation failed.
-        return { value = detectionData, details = {}, clientValidated = false }
+        return {
+            type = detectionType,
+            detectedValue = detectionData,
+            baselineValue = nil,
+            serverValidated = false,
+            context = {},
+            clientValidated = false
+        }
     end
-    -- Ensure essential fields exist, defaulting if necessary.
-    detectionData.value = detectionData.value -- The primary value reported (e.g., speed, health).
-    detectionData.details = detectionData.details or {} -- Additional contextual details.
-    detectionData.clientValidated = detectionData.clientValidated or false -- Flag indicating if the client-side detector triggered this report.
+
+    detectionData.type = detectionData.type or detectionType
+    detectionData.detectedValue = detectionData.detectedValue or detectionData.value
+    detectionData.baselineValue = detectionData.baselineValue
+    detectionData.serverValidated = detectionData.serverValidated or false
+    detectionData.context = detectionData.context or detectionData.details or {}
+    detectionData.clientValidated = detectionData.clientValidated or false
+
     return detectionData
 end
 
@@ -151,7 +161,7 @@ end
 local function ApplyPenalty(playerId, session, detectionType, validatedData, severity)
     local playerName = Natives.GetPlayerName(playerId) or ("Unknown (" .. tostring(playerId) .. ")")
     local reason = validatedData.reason or "No specific reason provided."
-    local details = validatedData.details or {}
+    local context = validatedData.context or {}
     -- Determine trust score impact based on severity config, with defaults.
     local trustImpact = (NexusGuardServer.Config.Severity and NexusGuardServer.Config.Severity[detectionType]) or
                         (NexusGuardServer.Config.Severity and NexusGuardServer.Config.Severity.default) or 5
@@ -159,7 +169,7 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
     -- Ensure JSON encoding is safe for logging details.
     local detailsJson = "error encoding"
     local encSuccess, encResult = pcall(function()
-        return Dependencies.JSON.encode(details)
+        return Dependencies.JSON.encode(context)
     end)
     if encSuccess and encResult then
         detailsJson = encResult
@@ -183,11 +193,31 @@ local function ApplyPenalty(playerId, session, detectionType, validatedData, sev
         table.insert(session.metrics.detections, {
             type = detectionType,
             reason = reason,
-            details = details, -- Store original table, not JSON
+            details = context, -- Store original table, not JSON
             severity = severity,
             trustImpact = trustImpact,
             timestamp = os.time()
         })
+        -- Track repeat detections for progressive responses
+        session.metrics.detectionCounts = session.metrics.detectionCounts or {}
+        session.metrics.detectionCounts[detectionType] = (session.metrics.detectionCounts[detectionType] or 0) + 1
+        local repeatCount = session.metrics.detectionCounts[detectionType]
+
+        if repeatCount == 1 then
+            Log(("^3[NexusGuard Warning]^7 %s (ID: %d) confirmed %s (warning)"):format(playerName, playerId, detectionType), 2)
+        elseif repeatCount == 2 then
+            local kickReason = ("Kicked by Anti-Cheat: repeated %s detections (%d)"):format(detectionType, repeatCount)
+            Natives.DropPlayer(playerId, kickReason)
+            return
+        elseif repeatCount >= 3 then
+            local banReason = ("Automatic ban: repeated %s detections (%d)"):format(detectionType, repeatCount)
+            if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
+                NexusGuardServer.Bans.Execute(playerId, banReason, "NexusGuard System")
+            else
+                Natives.DropPlayer(playerId, banReason)
+            end
+            return
+        end
         -- Also store in database if configured
         if NexusGuardServer.Detections and NexusGuardServer.Detections.Store then
             NexusGuardServer.Detections.Store(playerId, detectionType, validatedData)
@@ -262,7 +292,7 @@ function Detections.Process(playerId, detectionType, detectionData, session)
     Log(("^3Detections: Processing report for player %s (ID: %d), Type: %s^7"):format(playerName, playerId, detectionType), 3)
 
     -- 1. Validate Input Data Structure: Ensure detectionData is a table with expected base fields.
-    local validatedData = ValidateDetectionData(detectionData)
+    local validatedData = ValidateDetectionData(detectionData, detectionType)
     validatedData.serverValidated = false -- Initialize server validation status for this run.
     validatedData.reason = validatedData.reason or "Initial report received" -- Default reason if none provided.
 
@@ -288,7 +318,7 @@ function Detections.Process(playerId, detectionType, detectionData, session)
     -- Speed Hack / Server Speed Check Validation
     if detectionType == "SpeedHack" or detectionType == "ServerSpeedCheck" then
         -- Extract speed value (might come from client 'value' or server 'calculatedSpeed').
-        local speed = tonumber(validatedData.value) or tonumber(validatedData.calculatedSpeed) or tonumber(validatedData.details and validatedData.details.speed)
+        local speed = tonumber(validatedData.detectedValue) or tonumber(validatedData.calculatedSpeed) or tonumber(validatedData.context and validatedData.context.speed)
         if speed then
             local baseThreshold = Thresholds.serverSideSpeedThreshold or 50.0 -- Base speed limit (m/s).
             local effectiveThreshold = baseThreshold
@@ -411,12 +441,12 @@ function Detections.Process(playerId, detectionType, detectionData, session)
                     "Calculated speed %.2f m/s exceeded threshold %.2f m/s%s (%.1fx, Confidence: %.1f)",
                     speed, effectiveThreshold, reasonSuffix, thresholdExceedFactor, confidenceLevel)
                 -- Store relevant details for logging/review.
-                validatedData.details.speed = speed
-                validatedData.details.threshold = effectiveThreshold
-                validatedData.details.exceedFactor = thresholdExceedFactor
-                validatedData.details.confidence = confidenceLevel
-                validatedData.details.consistent = consistentViolation
-                validatedData.details.state = {
+                validatedData.context.speed = speed
+                validatedData.context.threshold = effectiveThreshold
+                validatedData.context.exceedFactor = thresholdExceedFactor
+                validatedData.context.confidence = confidenceLevel
+                validatedData.context.consistent = consistentViolation
+                validatedData.context.state = {
                     falling = session.metrics.isFalling,
                     ragdoll = session.metrics.isRagdoll,
                     parachute = session.metrics.isInParachute,
@@ -522,15 +552,15 @@ function Detections.Process(playerId, detectionType, detectionData, session)
                     "Health regeneration rate %.2f HP/s (increase %.1f HP) exceeded threshold %.2f HP/s%s (%.1fx, Confidence: %.1f)",
                     rate, increase, adjustedThreshold, reasonSuffix, thresholdExceedFactor, confidenceLevel)
 
-                validatedData.details.rate = rate
-                validatedData.details.increase = increase
-                validatedData.details.threshold = adjustedThreshold
-                validatedData.details.baseThreshold = regenThreshold
-                validatedData.details.exceedFactor = thresholdExceedFactor
-                validatedData.details.confidence = confidenceLevel
-                validatedData.details.consistent = consistentRegen
-                validatedData.details.hasRecentHealing = hasRecentHealing
-                validatedData.details.timeDiff = validatedData.timeDiff
+                validatedData.context.rate = rate
+                validatedData.context.increase = increase
+                validatedData.context.threshold = adjustedThreshold
+                validatedData.context.baseThreshold = regenThreshold
+                validatedData.context.exceedFactor = thresholdExceedFactor
+                validatedData.context.confidence = confidenceLevel
+                validatedData.context.consistent = consistentRegen
+                validatedData.context.hasRecentHealing = hasRecentHealing
+                validatedData.context.timeDiff = validatedData.timeDiff
             end
         elseif detectionType == "GodMode" then
             -- Enhanced server-side validation for client-reported GodMode
@@ -565,10 +595,10 @@ function Detections.Process(playerId, detectionType, detectionData, session)
                         "Detected %d/%d (%.1f%%) instances where health didn't decrease after damage",
                         suspiciousPatterns, totalDamageEvents, (suspiciousPatterns / totalDamageEvents) * 100)
 
-                    validatedData.details.suspiciousPatterns = suspiciousPatterns
-                    validatedData.details.totalDamageEvents = totalDamageEvents
-                    validatedData.details.suspiciousRatio = suspiciousPatterns / totalDamageEvents
-                    validatedData.details.confidence = confidenceLevel
+                    validatedData.context.suspiciousPatterns = suspiciousPatterns
+                    validatedData.context.totalDamageEvents = totalDamageEvents
+                    validatedData.context.suspiciousRatio = suspiciousPatterns / totalDamageEvents
+                    validatedData.context.confidence = confidenceLevel
                 end
             end
         end
@@ -584,8 +614,8 @@ function Detections.Process(playerId, detectionType, detectionData, session)
             isValid = true
             severity = "Medium" -- High armor is suspicious.
             validatedData.reason = string.format("Armor value %.1f exceeded maximum allowed %.1f", armor, maxArmor)
-            validatedData.details.armor = armor
-            validatedData.details.threshold = maxArmor
+            validatedData.context.armor = armor
+            validatedData.context.threshold = maxArmor
         end
         validatedData.serverValidated = isValid
 
@@ -598,12 +628,12 @@ function Detections.Process(playerId, detectionType, detectionData, session)
             -- This check is prone to false positives, keep severity low if relying only on this.
             severity = "Low"
             validatedData.reason = "Potential large distance movement detected (basic check)."
-            validatedData.details.distance = distance
-            validatedData.details.timeDiff = timeDiff
+            validatedData.context.distance = distance
+            validatedData.context.timeDiff = timeDiff
         end
 
         -- Experimental Raycasting Check (Guideline 31 Enhancement)
-        local currentPos = validatedData.value or validatedData.details.currentPos -- Position reported by client/check
+        local currentPos = validatedData.detectedValue or validatedData.context.currentPos -- Position reported by client/check
         local lastValidPos = session.metrics.lastValidPosition -- Last position deemed valid by server
 
         -- Ensure we have valid vector3 positions for raycasting.
@@ -652,11 +682,11 @@ function Detections.Process(playerId, detectionType, detectionData, session)
                                 hitPosition.x, hitPosition.y, hitPosition.z,
                                 lastValidPos.x, lastValidPos.y, lastValidPos.z,
                                 currentPos.x, currentPos.y, currentPos.z)
-                            validatedData.details.raycastHit = true
-                            validatedData.details.hitPos = hitPosition
-                            validatedData.details.startPos = lastValidPos
-                            validatedData.details.endPos = currentPos
-                            validatedData.details.hitEntity = hitEntity
+                            validatedData.context.raycastHit = true
+                            validatedData.context.hitPos = hitPosition
+                            validatedData.context.startPos = lastValidPos
+                            validatedData.context.endPos = currentPos
+                            validatedData.context.hitEntity = hitEntity
                             Log(
                                 ("^1[NexusGuard Raycast] Noclip/Teleport detected for %s (ID: %d). Ray hit entity %s.^7")
                                 :format(playerName, playerId, tostring(hitEntity or 'unknown')), 1)
@@ -678,19 +708,19 @@ function Detections.Process(playerId, detectionType, detectionData, session)
     -- Weapon Mod / Clip Size Check Validation
     elseif detectionType == "WeaponModification" or detectionType == "ServerWeaponClipCheck" then
         -- Extract data from the report (clip size, max allowed, weapon hash).
-        local reportedClip = tonumber(validatedData.reportedClip) or tonumber(validatedData.details and validatedData.details.reportedClip)
-        local maxAllowed = tonumber(validatedData.maxAllowed) or tonumber(validatedData.details and validatedData.details.maxAllowed)
-        local weaponHash = validatedData.weaponHash or (validatedData.details and validatedData.details.weaponHash)
+        local reportedClip = tonumber(validatedData.reportedClip) or tonumber(validatedData.context and validatedData.context.reportedClip)
+        local maxAllowed = tonumber(validatedData.maxAllowed) or tonumber(validatedData.context and validatedData.context.maxAllowed)
+        local weaponHash = validatedData.weaponHash or (validatedData.context and validatedData.context.weaponHash)
 
         -- Check if reported clip size exceeds the maximum allowed from config (Guideline 24).
         if reportedClip and maxAllowed and reportedClip > maxAllowed then
             isValid = true
             severity = "High" -- Modified weapon stats are high severity.
             validatedData.reason = string.format("Weapon %s clip size %d exceeded max allowed %d", weaponHash or 'Unknown', reportedClip, maxAllowed)
-            validatedData.details.weapon = weaponHash
-            validatedData.details.reported = reportedClip
-            validatedData.details.allowed = maxAllowed
-            validatedData.details.base = validatedData.baseClip or (validatedData.details and validatedData.details.baseClip)
+            validatedData.context.weapon = weaponHash
+            validatedData.context.reported = reportedClip
+            validatedData.context.allowed = maxAllowed
+            validatedData.context.base = validatedData.baseClip or (validatedData.context and validatedData.context.baseClip)
         end
          validatedData.serverValidated = isValid
 
@@ -699,8 +729,8 @@ function Detections.Process(playerId, detectionType, detectionData, session)
         -- This detection is generated server-side during the resource check, so it's inherently validated.
         isValid = true
         severity = "Critical" -- Resource tampering is critical severity.
-        validatedData.reason = "Unauthorized client resources detected (" .. (validatedData.mode or validatedData.details.mode or "unknown mode") .. ")."
-        validatedData.details.mismatched = validatedData.mismatched or validatedData.details.mismatched or {}
+        validatedData.reason = "Unauthorized client resources detected (" .. (validatedData.mode or validatedData.context.mode or "unknown mode") .. ")."
+        validatedData.context.mismatched = validatedData.mismatched or validatedData.context.mismatched or {}
         validatedData.serverValidated = true -- Mark as server-validated.
 
     -- Menu Injection / Detection Validation
@@ -852,8 +882,14 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
                         timeDiff = timeDiffMs
                     }
 
-                    -- Apply penalty for teleport detection
-                    ApplyPenalty(playerId, session, "ServerTeleportCheck", { reason = reason, details = details, serverValidated = true }, "High")
+                    ApplyPenalty(playerId, session, "ServerTeleportCheck", {
+                        type = "ServerTeleportCheck",
+                        detectedValue = distance,
+                        baselineValue = teleportThreshold,
+                        serverValidated = true,
+                        context = details,
+                        reason = reason
+                    }, "High")
 
                     -- Set teleport grace period to avoid multiple detections for the same teleport
                     session.metrics.justTeleported = true
@@ -942,7 +978,14 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
                 end
 
                 -- Apply penalty for speed hack detection
-                ApplyPenalty(playerId, session, "ServerSpeedCheck", { reason = reason, details = details, serverValidated = true }, "High")
+                ApplyPenalty(playerId, session, "ServerSpeedCheck", {
+                    type = "ServerSpeedCheck",
+                    detectedValue = speed,
+                    baselineValue = effectiveThreshold,
+                    serverValidated = true,
+                    context = details,
+                    reason = reason
+                }, "High")
             else
                 -- Perform noclip detection using raycasting if enabled
                 if Thresholds.enableNoclipDetection and session.metrics.lastValidPosition then
@@ -983,7 +1026,14 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
                                     }
 
                                     -- Apply penalty for noclip detection
-                                    ApplyPenalty(playerId, session, "ServerNoclipCheck", { reason = reason, details = details, serverValidated = true }, "High")
+                                    ApplyPenalty(playerId, session, "ServerNoclipCheck", {
+                                        type = "ServerNoclipCheck",
+                                        detectedValue = distToHit,
+                                        baselineValue = noclipTolerance,
+                                        serverValidated = true,
+                                        context = details,
+                                        reason = reason
+                                    }, "High")
                                 end
                             end
                         end
@@ -1052,7 +1102,14 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
         local details = { invincibleStatus = true }
         -- Apply penalty immediately for server-confirmed invincibility.
         ApplyPenalty(playerId, session, "ServerInvincibleCheck",
-            { reason = reason, details = details, serverValidated = true }, "Critical")
+            {
+                type = "ServerInvincibleCheck",
+                detectedValue = 1,
+                baselineValue = 0,
+                serverValidated = true,
+                context = details,
+                reason = reason
+            }, "Critical")
         -- Potentially skip further health checks if confirmed invincible, or let them run for logging.
         -- For now, we'll let other checks run too.
     end
@@ -1110,7 +1167,14 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
                 }
 
                 -- Apply penalty for health regeneration violation
-                ApplyPenalty(playerId, session, "ServerHealthRegenCheck", { reason = reason, details = details, serverValidated = true }, "Medium")
+                ApplyPenalty(playerId, session, "ServerHealthRegenCheck", {
+                    type = "ServerHealthRegenCheck",
+                    detectedValue = regenRate,
+                    baselineValue = adjustedThreshold,
+                    serverValidated = true,
+                    context = details,
+                    reason = reason
+                }, "Medium")
 
                 -- reset buffer after flagging
                 session.metrics.healthIncreaseBuffer = 0
@@ -1154,7 +1218,14 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
 
                     -- Apply penalty for godmode violation
                     ApplyPenalty(playerId, session, "ServerGodModeCheck",
-                        { reason = reason, details = details, serverValidated = true }, "High")
+                        {
+                            type = "ServerGodModeCheck",
+                            detectedValue = currentHealth,
+                            baselineValue = expectedHealth,
+                            serverValidated = true,
+                            context = details,
+                            reason = reason
+                        }, "High")
                 end
             end
 
@@ -1170,7 +1241,14 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
                 }
 
                 -- Apply penalty for godmode detection
-                ApplyPenalty(playerId, session, "ServerGodModeCheck", { reason = reason, details = details, serverValidated = true }, "High")
+                ApplyPenalty(playerId, session, "ServerGodModeCheck", {
+                    type = "ServerGodModeCheck",
+                    detectedValue = godModePattern.samples or 0,
+                    baselineValue = 0,
+                    serverValidated = true,
+                    context = details,
+                    reason = reason
+                }, "High")
             end
         end
     end
@@ -1188,7 +1266,14 @@ function Detections.ValidateHealthUpdate(playerId, currentHealth, currentArmor, 
             }
 
             -- Apply penalty for armor violation
-            ApplyPenalty(playerId, session, "ServerArmorCheck", { reason = reason, details = details, serverValidated = true }, "Medium")
+            ApplyPenalty(playerId, session, "ServerArmorCheck", {
+                type = "ServerArmorCheck",
+                detectedValue = currentArmor,
+                baselineValue = serverArmorMax,
+                serverValidated = true,
+                context = details,
+                reason = reason
+            }, "Medium")
 
             session.metrics.armorOverageCount = 0
         end
