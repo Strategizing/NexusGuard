@@ -10,7 +10,7 @@
     Dependencies:
     - `server/sv_utils.lua` (for logging)
     - `ox_lib` resource (for `lib.crypto.hmac.sha256`)
-    - Global `Config` table (for `Config.SecuritySecret`)
+    - Config table provided during initialization (for `Config.SecuritySecret`)
 
     Usage:
     - Required by `globals.lua` and exposed via the `NexusGuardServer.Security` API table.
@@ -24,6 +24,7 @@
 local Utils = require('server/sv_utils')                  -- Load the utils module for logging
 local Natives = require('shared/natives')                 -- Load the natives wrapper
 local Dependencies = require('shared/dependency_manager') -- Load the dependency manager
+local Core = require('server/sv_core')                    -- Access other modules via Core
 local Log -- Local alias for Log, set during Initialize
 
 -- Local reference to the Config table, set during Initialize
@@ -348,17 +349,9 @@ function Security.ValidateEventSource(source, requireSession)
 
     -- Check for valid session if required
     if requireSession then
-        -- Try to access the global NexusGuardServer table safely
         local hasSession = false
-        local success, result = pcall(function()
-            if _G.NexusGuardServer and type(_G.NexusGuardServer.GetSession) == "function" then
-                local session = _G.NexusGuardServer.GetSession(source)
-                return session ~= nil
-            end
-            return false
-        end)
-
-        hasSession = success and result
+        local success, session = pcall(Core.GetSession, source)
+        hasSession = success and session ~= nil
 
         if not hasSession then
             Log("^1[Security] Event from player without valid session ID: " .. tostring(source) .. "^7", 1)

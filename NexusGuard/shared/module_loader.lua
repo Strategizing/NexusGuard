@@ -28,7 +28,8 @@ local ModuleLoader = {
         stateValidator = 'server/modules/state_validator',
         networkMonitor = 'server/modules/network_monitor',
         resourceValidator = 'server/modules/resource_validator',
-        detections = 'server/modules/detections'
+        detections = 'server/sv_detections',
+        playerMetrics = 'server/sv_player_metrics'
     }
 }
 

@@ -41,7 +41,6 @@ local Core = {
     },
 
     -- Server-side tracking (merged from server/modules/core.lua)
-    PlayerMetrics = {},
     OnlineAdmins = {}
 }
 
@@ -101,6 +100,7 @@ function Core.LoadModules()
     local moduleLoadOrder = {
         "Security",
         "Session",
+        "PlayerMetrics",
         "Database",
         "Bans",
         "Discord",

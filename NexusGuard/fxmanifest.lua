@@ -29,11 +29,12 @@ server_scripts {
     'server/sv_security.lua',
     'server/sv_event_proxy.lua',
     'server/sv_session.lua',        -- Load session management module
+    'server/sv_player_metrics.lua', -- Track player metrics
     'server/sv_bans.lua',
     'server/sv_database.lua',       -- Load database module
     'server/sv_discord.lua',        -- Load Discord module
+    'server/sv_detections.lua',     -- Detection processing
     'server/sv_event_handlers.lua', -- Load event handlers module
-    'server/modules/*.lua',         -- Load other modules (like detections)
     'globals.lua',                  -- Load globals to define API table (after modules are available)
     'server/server_main.lua'        -- Load main server logic last
 }
