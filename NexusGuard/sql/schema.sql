@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS `nexusguard_bans` (
   `expire_date` TIMESTAMP NULL DEFAULT NULL, -- For temporary bans
   INDEX `license_index` (`license`),
   INDEX `ip_index` (`ip`),
-  INDEX `discord_index` (`discord`)
+  INDEX `discord_index` (`discord`),
+  INDEX `expire_index` (`expire_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Detections History Table

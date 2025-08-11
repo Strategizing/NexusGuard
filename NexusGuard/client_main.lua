@@ -188,7 +188,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     function NexusGuardInstance:ComputeAdaptiveInterval(baseInterval, playerId)
         local perf = self.Config and self.Config.Performance
         local adaptive = perf and perf.adaptiveTiming or {}
-        local lowMult = adaptive.lowRiskMultiplier or 2.0
+        local lowMult = adaptive.lowRiskMultiplier or 1.0
         local highMult = adaptive.highRiskMultiplier or 0.5
         local minDelay = adaptive.minimumDelay or 200
         local maxScore = adaptive.maxSuspicion or 100

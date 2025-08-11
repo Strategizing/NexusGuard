@@ -221,11 +221,12 @@ Config.Performance = {
     adaptiveTiming = {
         baseInterval = 1000, -- Base interval used for adaptive calculations
         highRiskMultiplier = 0.5, -- Interval multiplier when suspicion is at maximum
-        lowRiskMultiplier = 2.0, -- Interval multiplier when suspicion is zero
+        lowRiskMultiplier = 1.0, -- Interval multiplier when suspicion is zero
         minimumDelay = 200, -- Absolute minimum delay between checks (ms)
         maxSuspicion = 100 -- Maximum suspicion score before clamping
     },
     batchUpdates = true, -- Group position/health updates to reduce network traffic
+    batchInterval = 500, -- Interval in ms for processing batched updates
     optimizeLogging = true, -- Only log important events in production
     smartDetection = true -- Context-aware detection (reduces false positives)
 }

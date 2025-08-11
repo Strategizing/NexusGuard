@@ -97,6 +97,8 @@ function Database.Initialize()
 
     if not errorsOccurred then
         Log("Database: Schema check/creation completed successfully.", 2)
+        -- Ensure essential indexes exist to keep lookups fast.
+        if Database.EvaluateIndexes then Database.EvaluateIndexes() end
         -- After successful schema setup, force a reload of the ban list cache.
         if NexusGuardServer.Bans and NexusGuardServer.Bans.LoadList then
             Log("Database: Triggering initial ban list load...", 3)
@@ -106,6 +108,31 @@ function Database.Initialize()
         end
     else
         Log("^1Database Warning: Errors occurred during database schema setup. Review console logs above. NexusGuard functionality may be affected.^7", 1)
+    end
+end
+
+-- Verify required indexes exist for commonly queried tables.
+function Database.EvaluateIndexes()
+    if not MySQL then Log("^1Database Error: Cannot evaluate indexes - MySQL object missing.^7", 1); return end
+    local indexDefs = {
+        { table = 'nexusguard_bans', key = 'license_index', column = 'license' },
+        { table = 'nexusguard_bans', key = 'ip_index', column = 'ip' },
+        { table = 'nexusguard_bans', key = 'discord_index', column = 'discord' },
+        { table = 'nexusguard_bans', key = 'expire_index', column = 'expire_date' },
+        { table = 'nexusguard_detections', key = 'player_license_index', column = 'player_license' },
+        { table = 'nexusguard_detections', key = 'detection_type_index', column = 'detection_type' },
+        { table = 'nexusguard_detections', key = 'timestamp_index', column = 'timestamp' }
+    }
+    for _, idx in ipairs(indexDefs) do
+        local res = MySQL.Sync.fetchAll('SHOW INDEX FROM '..idx.table..' WHERE Key_name = @name', { ['@name'] = idx.key })
+        if not res or #res == 0 then
+            local ok, err = pcall(MySQL.Sync.execute, ('CREATE INDEX %s ON %s (%s)'):format(idx.key, idx.table, idx.column))
+            if ok then
+                Log(("Database: Created missing index %s on %s.%s"):format(idx.key, idx.table, idx.column), 2)
+            else
+                Log(("^1Database Warning: Failed to create index %s on %s: %s^7"):format(idx.key, idx.table, tostring(err)), 1)
+            end
+        end
     end
 end
 
