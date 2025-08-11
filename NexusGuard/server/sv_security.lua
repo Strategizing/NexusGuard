@@ -30,11 +30,11 @@ local Log -- Local alias for Log, set during Initialize
 local Config = nil
 
 local Security = {
-    -- Anti-Replay Cache: Stores recently validated token signatures and their expiry times.
-    -- Prevents the same token from being accepted multiple times within its validity window.
-    -- Key: Token signature (string)
-    -- Value: Expiry timestamp (number, os.time() format)
+    -- Anti-Replay Caches
+    -- recentTokens: key=signature, value=expiry timestamp
+    -- recentTimestamps: key=playerId -> (timestamp -> expiry)
     recentTokens = {},
+    recentTimestamps = {},
     tokenCacheCleanupInterval = 60000, -- Default cleanup interval (ms), overridden by config
     lastTokenCacheCleanup = 0,         -- Timestamp (GetGameTimer) of the last cleanup.
     maxTimeDifference = 60,            -- Default validity window (seconds), overridden by config
@@ -269,11 +269,21 @@ function Security.ValidateToken(playerId, tokenData)
         return false -- Signatures do not match.
     end
 
-    -- 3. Anti-Replay Check: Prevent the same token from being used multiple times.
-    local cacheKey = receivedSignature -- Use the unique signature as the key in the cache.
-    local expiryTime = Security.recentTokens[cacheKey] -- Check if this signature exists in the cache.
+    -- 3. Anti-Replay Check: Prevent reuse of timestamps and token signatures.
+    -- First check timestamps per player
+    local playerCache = Security.recentTimestamps[playerId] or {}
+    Security.recentTimestamps[playerId] = playerCache
+    local timestampExpiry = playerCache[receivedTimestamp]
+    if timestampExpiry and currentTime < timestampExpiry then
+        Log(("^1Security Warning: Timestamp replay detected for player %d. Timestamp: %d^7"):format(playerId, receivedTimestamp), 1)
+        Security.stats.replayAttempts = Security.stats.replayAttempts + 1
+        Security.stats.tokensFailed = Security.stats.tokensFailed + 1
+        return false -- Timestamp has already been used recently.
+    end
 
-    -- If the signature is in the cache AND the current time is before its expiry time, it's a replay attempt.
+    -- Then check token signature reuse
+    local cacheKey = receivedSignature -- Use the unique signature as the key in the cache.
+    local expiryTime = Security.recentTokens[cacheKey]
     if expiryTime and currentTime < expiryTime then
         Log(("^1Security Warning: Token replay detected for player %d. Signature: %s^7"):format(playerId, cacheKey), 1)
         Security.stats.replayAttempts = Security.stats.replayAttempts + 1
@@ -281,10 +291,11 @@ function Security.ValidateToken(playerId, tokenData)
         return false -- Token has already been used recently.
     end
 
-    -- If all checks passed: Add the token signature to the anti-replay cache with an expiry time.
-    -- The expiry time should be slightly longer than the validation window to cover edge cases.
+    -- If all checks passed: add entries to anti-replay caches with expiry times
     local cacheBuffer = 5 -- Add a small buffer (e.g., 5 seconds).
-    Security.recentTokens[cacheKey] = currentTime + Security.maxTimeDifference + cacheBuffer
+    local expiry = currentTime + Security.maxTimeDifference + cacheBuffer
+    Security.recentTokens[cacheKey] = expiry
+    playerCache[receivedTimestamp] = expiry
 
     -- Track successful validation in statistics
     Security.stats.tokensValidated = Security.stats.tokensValidated + 1
@@ -305,19 +316,34 @@ function Security.CleanupTokenCache()
         return -- Not time to clean yet.
     end
 
-    local cleanupCount = 0
-    -- Iterate through the cached tokens.
+    local tokenCleanupCount, timestampCleanupCount = 0, 0
+
+    -- Iterate through the cached token signatures.
     for signature, expiryTimestamp in pairs(Security.recentTokens) do
-        -- If the current server time is past the token's expiry time, remove it.
         if currentServerTime >= expiryTimestamp then
             Security.recentTokens[signature] = nil
-            cleanupCount = cleanupCount + 1
+            tokenCleanupCount = tokenCleanupCount + 1
         end
     end
 
-    if cleanupCount > 0 then
-        Log(("Security: Cleaned up %d expired entries from token anti-replay cache."):format(cleanupCount), 3)
+    -- Iterate through cached timestamps per player.
+    for playerId, timestamps in pairs(Security.recentTimestamps) do
+        for ts, expiry in pairs(timestamps) do
+            if currentServerTime >= expiry then
+                timestamps[ts] = nil
+                timestampCleanupCount = timestampCleanupCount + 1
+            end
+        end
+        if next(timestamps) == nil then
+            Security.recentTimestamps[playerId] = nil
+        end
     end
+
+    if tokenCleanupCount > 0 or timestampCleanupCount > 0 then
+        Log(("Security: Cleaned up %d token signatures and %d timestamp entries from anti-replay cache.")
+            :format(tokenCleanupCount, timestampCleanupCount), 3)
+    end
+
     -- Update the last cleanup timestamp.
     Security.lastTokenCacheCleanup = currentGameTime
 end

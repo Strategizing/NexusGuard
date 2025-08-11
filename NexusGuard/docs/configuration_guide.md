@@ -36,7 +36,7 @@ Config.PermissionsFramework = "ace" -- Options: "ace", "esx", "qbcore", "custom"
 Config.AdminGroups = {"admin", "superadmin"} -- Admin group names in your framework
 ```
 
-Tokens include built-in anti-replay protection. `TokenValidityWindow` sets how long a token is valid, and `TokenCacheCleanupIntervalMs` controls cleanup of cached signatures used to prevent replays.
+Tokens include built-in anti-replay protection. NexusGuard tracks used timestamps within the validity window and rejects replays. `TokenValidityWindow` sets how long a token and its timestamp are valid, and `TokenCacheCleanupIntervalMs` controls cleanup of cached entries.
 
 ### Enabling/Disabling Detectors
 

@@ -1,41 +1,38 @@
 local Security = {}
 local Core = exports["NexusGuard"]:GetCore()
-local usedTokens = {}
+local usedTimestamps = {}
 
 -- Enhanced token validation with replay protection
 function Security.ValidateToken(playerId, eventName, token, timestamp)
     if not Config.Security.tokenValidationEnabled then return true end
     if not token or not timestamp then return false end
     
-    -- Check for token reuse (replay attack)
-    local tokenKey = playerId .. ":" .. token:sub(1, 8)
-    if usedTokens[tokenKey] then
-        print("^1[NexusGuard] SECURITY: Token reuse detected for player " .. playerId)
-        return false
-    end
-    
     -- Validate timestamp is recent
     local currentTime = os.time()
-    local timeDiff = currentTime - tonumber(timestamp)
+    local timestampNum = tonumber(timestamp)
+    local timeDiff = currentTime - timestampNum
     if timeDiff > Config.Security.tokenValidityWindow or timeDiff < -10 then
         print("^1[NexusGuard] SECURITY: Token timestamp invalid for player " .. playerId)
         return false
     end
-    
+
+    -- Check if timestamp already used (replay attack)
+    usedTimestamps[playerId] = usedTimestamps[playerId] or {}
+    if usedTimestamps[playerId][timestampNum] then
+        print("^1[NexusGuard] SECURITY: Timestamp reuse detected for player " .. playerId)
+        return false
+    end
+
     -- Validate HMAC
     local expectedToken = Security.GenerateToken(playerId, eventName, timestamp)
     local isValid = token == expectedToken
-    
-    -- If valid, remember token to prevent replay
+
+    -- If valid, remember timestamp to prevent replay
     if isValid then
-        usedTokens[tokenKey] = currentTime
-        
-        -- Cleanup old tokens periodically
-        if #usedTokens > 1000 then
-            Security.CleanupOldTokens(currentTime)
-        end
+        usedTimestamps[playerId][timestampNum] = currentTime
+        Security.CleanupOldTimestamps(currentTime)
     end
-    
+
     return isValid
 end
 
@@ -49,10 +46,15 @@ function Security.GenerateToken(playerId, eventName, timestamp)
     end
 end
 
-function Security.CleanupOldTokens(currentTime)
-    for k, timestamp in pairs(usedTokens) do
-        if currentTime - timestamp > Config.Security.tokenValidityWindow * 2 then
-            usedTokens[k] = nil
+function Security.CleanupOldTimestamps(currentTime)
+    for pid, timestamps in pairs(usedTimestamps) do
+        for ts, lastUse in pairs(timestamps) do
+            if currentTime - lastUse > Config.Security.tokenValidityWindow * 2 then
+                timestamps[ts] = nil
+            end
+        end
+        if next(timestamps) == nil then
+            usedTimestamps[pid] = nil
         end
     end
 end

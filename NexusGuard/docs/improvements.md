@@ -83,7 +83,7 @@
 - **Unbounded Collections**: Arrays like `session.metrics.healthHistory` in `server/sv_session.lua` grow without proper bounds.
 - **Redundant Data Storage**: Similar data is stored in multiple places across different modules.
 - **Memory Leaks in Event Handlers**: Some event handlers in `server/sv_event_handlers.lua` may not be properly cleaned up, potentially causing memory leaks.
-- **Large Table Growth**: Tables like `usedTokens` in `server/modules/security.lua` grow indefinitely without cleanup mechanisms.
+- **Large Table Growth**: Tables like `usedTimestamps` in `server/modules/security.lua` grow indefinitely without cleanup mechanisms.
 
 ## 5. Error Handling and Logging
 
