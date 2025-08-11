@@ -54,6 +54,12 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
     *   **Custom Permissions:** If you set `Config.PermissionsFramework = "custom"`, you **MUST** edit the `IsPlayerAdmin` function in `globals.lua` to add your specific permission checking logic.
     *   **(Optional) Placeholders:** Review functions marked as placeholders in the code (search for comments like `-- Placeholder:`) and implement them if you intend to use those features.
 7.  **Server Config:** Add `ensure NexusGuard` to your `server.cfg`, ensuring it starts *after* its required dependencies (`oxmysql`, `screenshot-basic`, `ox_lib`) and any selected optional framework dependencies (`es_extended`, `qb-core`).
+    ```cfg
+    ensure oxmysql
+    ensure screenshot-basic
+    ensure ox_lib
+    ensure NexusGuard
+    ```
 8.  **Restart Server & Test:** Restart your FiveM server. Check the console thoroughly for any NexusGuard errors or warnings (especially critical ones about missing dependencies or security). Test detections and actions rigorously, paying close attention to admin checks.
 
 ## Configuration Deep Dive
