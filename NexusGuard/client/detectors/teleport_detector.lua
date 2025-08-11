@@ -134,12 +134,6 @@ function Detector.Check()
                 -- Log(("[%s Detector] Client detected potential teleport: %s"):format(DetectorName, reason), 2) -- Log locally if desired
 
                 -- NOTE: Reporting removed. Server-side position validation is more reliable.
-                -- if NexusGuard.ReportCheat then
-                --     NexusGuard:ReportCheat(DetectorName, {
-                --         reason = reason, distance = distance, timeDiff = timeDiff
-                --     })
-                -- end
-                -- return 1 -- Indicate suspicion for adaptive timing (optional)
             end
         end
     end

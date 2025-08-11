@@ -35,6 +35,10 @@ local Security = {
     -- Key: Token signature (string)
     -- Value: Expiry timestamp (number, os.time() format)
     recentTokens = {},
+    -- Track used timestamps per player to prevent replay attacks with the same timestamp
+    usedTimestamps = {},
+    -- Active per-player challenge tokens
+    activeChallenges = {},
     tokenCacheCleanupInterval = 60000, -- Default cleanup interval (ms), overridden by config
     lastTokenCacheCleanup = 0,         -- Timestamp (GetGameTimer) of the last cleanup.
     maxTimeDifference = 60,            -- Default validity window (seconds), overridden by config
@@ -243,6 +247,16 @@ function Security.ValidateToken(playerId, tokenData)
         return false -- Token is too old or from the future.
     end
 
+    -- Prevent reuse of the same timestamp within the validity window
+    Security.usedTimestamps[playerId] = Security.usedTimestamps[playerId] or {}
+    local lastUsed = Security.usedTimestamps[playerId][receivedTimestamp]
+    if lastUsed and (currentTime - lastUsed) < Security.maxTimeDifference then
+        Log(("^1Security Warning: Token timestamp replay detected for player %d (timestamp: %d)^7"):format(playerId, receivedTimestamp), 1)
+        Security.stats.replayAttempts = Security.stats.replayAttempts + 1
+        Security.stats.tokensFailed = Security.stats.tokensFailed + 1
+        return false
+    end
+
     -- 2. Signature Verification: Recalculate the expected signature using the received timestamp, nonce, and player ID.
     local message
     if hasNonce then
@@ -286,6 +300,9 @@ function Security.ValidateToken(playerId, tokenData)
     local cacheBuffer = 5 -- Add a small buffer (e.g., 5 seconds).
     Security.recentTokens[cacheKey] = currentTime + Security.maxTimeDifference + cacheBuffer
 
+    -- Record the timestamp as used for this player
+    Security.usedTimestamps[playerId][receivedTimestamp] = currentTime
+
     -- Track successful validation in statistics
     Security.stats.tokensValidated = Security.stats.tokensValidated + 1
 
@@ -308,10 +325,29 @@ function Security.CleanupTokenCache()
     local cleanupCount = 0
     -- Iterate through the cached tokens.
     for signature, expiryTimestamp in pairs(Security.recentTokens) do
-        -- If the current server time is past the token's expiry time, remove it.
         if currentServerTime >= expiryTimestamp then
             Security.recentTokens[signature] = nil
             cleanupCount = cleanupCount + 1
+        end
+    end
+
+    -- Cleanup used timestamp cache
+    local buffer = Security.maxTimeDifference + 5
+    for playerId, tsTable in pairs(Security.usedTimestamps) do
+        for ts, usedAt in pairs(tsTable) do
+            if currentServerTime - usedAt > buffer then
+                tsTable[ts] = nil
+            end
+        end
+        if next(tsTable) == nil then
+            Security.usedTimestamps[playerId] = nil
+        end
+    end
+
+    -- Cleanup expired challenge tokens
+    for playerId, data in pairs(Security.activeChallenges) do
+        if currentServerTime >= data.expires then
+            Security.activeChallenges[playerId] = nil
         end
     end
 
@@ -367,6 +403,39 @@ function Security.ValidateEventSource(source, requireSession)
     end
 
     return true
+end
+
+--[[
+    Generate a short-lived challenge token for a player.
+    @param playerId (number): Player server ID.
+    @return (string | nil): Challenge token or nil on failure.
+]]
+function Security.GenerateChallengeToken(playerId)
+    if not Security.isActive then return nil end
+    if not playerId or playerId <= 0 then return nil end
+    local secret = Config and Config.SecuritySecret
+    if not secret or secret == "" then return nil end
+    local timestamp = os.time()
+    local message = tostring(playerId) .. ":challenge:" .. tostring(timestamp)
+    local signature = Dependencies.Crypto.hmac.sha256(secret, message)
+    if not signature then return nil end
+    local token = signature .. ":" .. timestamp
+    Security.activeChallenges[playerId] = { token = token, expires = timestamp + 30 }
+    return token
+end
+
+--[[
+    Verify a challenge response from a client.
+    @param playerId (number): Player server ID.
+    @param response (string): Challenge response from client.
+    @return (boolean): True if valid, false otherwise.
+]]
+function Security.VerifyChallengeResponse(playerId, response)
+    local data = Security.activeChallenges[playerId]
+    if not data then return false end
+    local valid = response == data.token and os.time() < data.expires
+    Security.activeChallenges[playerId] = nil
+    return valid
 end
 
 --[[

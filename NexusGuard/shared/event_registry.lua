@@ -43,6 +43,7 @@ EventRegistry.events = {
     -- Security Handshake (Client <-> Server)
     SECURITY_REQUEST_TOKEN = "security:requestToken", -- Client -> Server: Client requests a security token upon connection.
     SECURITY_RECEIVE_TOKEN = "security:receiveToken", -- Server -> Client: Server sends the generated security token data back to the client.
+    SECURITY_NEW_CHALLENGE = "security:newChallenge", -- Server -> Client: Server issues a new challenge token.
 
     -- Detection Reporting (Client -> Server)
     DETECTION_REPORT = "detection:report", -- Client -> Server: Client reports a detected violation with details and security token.
