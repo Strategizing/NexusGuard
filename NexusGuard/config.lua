@@ -93,6 +93,10 @@ Config.SeverityScores = {
     BlacklistedExplosion = 25, -- High impact as it's explicitly disallowed
     ExplosionSpam = 12,
     ResourceMismatch = 20, -- High impact as it indicates client modification/tampering
+    WeaponDamageMismatch = 20,
+    BlacklistedEntity = 15,
+    UnauthorizedResourceStart = 25,
+    UnauthorizedResourceStop = 25,
 
     -- Client-Side Detections (Generally lower confidence unless tuned)
     menuDetection = 5, -- Low impact due to unreliability of keybind checks
@@ -137,6 +141,13 @@ Config.WeaponBaseClipSize = { -- Base Clip Size (integer)
     [GetHashKey("WEAPON_PUMPSHOTGUN")] = 8,
     [GetHashKey("WEAPON_SNIPERRIFLE")] = 10,
     -- Add more weapons as needed...
+}
+
+-- Entity Creation Blacklist
+-- Any entity model hash listed here will be blocked on creation.
+-- Example: [GetHashKey("CARGOPLANE")] = true
+Config.EntityCreationBlacklist = {
+    -- Add blacklisted entity model hashes here
 }
 
 -- Detection Types

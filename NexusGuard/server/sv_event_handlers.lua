@@ -33,6 +33,21 @@ end
 -- Local alias for the logging function.
 local Log = NexusGuardServer.Utils.Log
 
+-- Reason codes for logging grouped by detection type
+local ReasonCodes = {
+    WeaponDamage = {
+        DATA_MISSING = "WDM_DATA_MISSING",
+        BASE_MISMATCH = "WDM_BASE_MISMATCH"
+    },
+    EntityCreation = {
+        BLACKLISTED = "EC_BLACKLISTED"
+    },
+    ResourceEvent = {
+        UNAUTH_START = "RES_UNAUTH_START",
+        UNAUTH_STOP = "RES_UNAUTH_STOP"
+    }
+}
+
 --[[
     Handles the `explosionEvent` game event.
     Performs checks for blacklisted explosion types and explosion spam based on config settings.
@@ -169,18 +184,130 @@ function EventHandlers.HandleExplosion(sender, ev, session)
 end
 
 --[[
-    Placeholder function for handling entity creation events.
-    WARNING: The `entityCreating` event can be heavily spammed and requires
-             very careful filtering and implementation to avoid performance issues.
-             It's generally recommended to use more specific events if possible.
-    @param entity (number): The network ID of the entity being created.
+    Handles the `weaponDamageEvent` game event.
+    Validates reported damage against configured base damage values.
+    @param sender (string): Player ID who caused the damage.
+    @param ev (table): Event data containing weapon hash and damage value.
+    @param session (table): Player session data.
+]]
+function EventHandlers.HandleWeaponDamage(sender, ev, session)
+    local source = tonumber(sender)
+    if not source or source <= 0 or not session or not session.metrics then return end
+
+    local cfgDamage = NexusGuardServer.Config.WeaponBaseDamage or {}
+    local thresholds = NexusGuardServer.Config.Thresholds or {}
+
+    if not ev or (ev.weaponType == nil and ev.weaponHash == nil and ev.weapon == nil) or not ev.damage then
+        Log(("^1[NexusGuard WeaponDamage][%s] Missing data from player %d^7"):format(ReasonCodes.WeaponDamage.DATA_MISSING, source), 1)
+        return
+    end
+
+    local weaponHash = ev.weaponType or ev.weaponHash or ev.weapon
+    local baseDamage = cfgDamage[weaponHash]
+    if not baseDamage then return end -- Unknown weapon, skip
+
+    local damage = tonumber(ev.damage) or 0
+    local multiplier = thresholds.weaponDamageMultiplier or 1.5
+
+    if damage > baseDamage * multiplier then
+        local reason = ReasonCodes.WeaponDamage.BASE_MISMATCH
+        local playerName = GetPlayerName(source) or ("Unknown (" .. source .. ")")
+        Log(("^1[NexusGuard WeaponDamage][%s] %s (ID: %d) reported %.2f damage for weapon %d (expected %.2f)^7")
+            :format(reason, playerName, source, damage, weaponHash, baseDamage), 1)
+        if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+            NexusGuardServer.Detections.Process(source, "WeaponDamageMismatch", {
+                value = damage,
+                details = {
+                    weapon = weaponHash,
+                    expected = baseDamage,
+                    allowedMultiplier = multiplier
+                },
+                reasonCode = reason,
+                clientValidated = false,
+                serverValidated = true
+            }, session)
+        end
+    end
+end
+
+--[[
+    Validates entity creation against a blacklist using `entityCreating`.
+    @param entity (number): Network ID of the entity being created.
 ]]
 function EventHandlers.HandleEntityCreation(entity)
-    -- Placeholder - Requires significant filtering and logic.
-    -- Example: Check if entity type is disallowed, check creation rate, etc.
-    -- local model = GetEntityModel(entity)
-    -- local creator = NetworkGetEntityOwner(entity) -- May not be reliable immediately
-    -- Log("Placeholder: HandleEntityCreation called for entity " .. entity .. " Model: " .. model, 4)
+    if not entity then return end
+    local model = GetEntityModel(entity)
+    local blacklist = NexusGuardServer.Config.EntityCreationBlacklist or {}
+    if not model or not blacklist[model] then return end
+
+    local owner = NetworkGetEntityOwner(entity) or 0
+    local playerName = GetPlayerName(owner) or ("Unknown (" .. tostring(owner) .. ")")
+    local reason = ReasonCodes.EntityCreation.BLACKLISTED
+    Log(("^1[NexusGuard EntityCreation][%s] Blocked blacklisted entity %d from %s (ID: %d)^7"):format(reason, model, playerName, owner), 1)
+    if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+        local session = NexusGuardServer.GetSession and NexusGuardServer.GetSession(owner)
+        NexusGuardServer.Detections.Process(owner, "BlacklistedEntity", {
+            value = model,
+            details = { entity = entity, model = model },
+            reasonCode = reason,
+            clientValidated = false,
+            serverValidated = true
+        }, session)
+    end
+    CancelEvent()
+end
+
+--[[
+    Handles resource start events after initial load.
+    @param resourceName (string): Name of the resource that started.
+]]
+function EventHandlers.HandleResourceStart(resourceName)
+    local rvConfig = NexusGuardServer.Config and NexusGuardServer.Config.Features and NexusGuardServer.Config.Features.resourceVerification
+    if not rvConfig or not rvConfig.enabled then return end
+    local mode = rvConfig.mode or 'whitelist'
+    local allowed = true
+    if mode == 'whitelist' then
+        local wl = {}
+        for _, name in ipairs(rvConfig.whitelist or {}) do wl[name] = true end
+        allowed = wl[resourceName] or false
+    elseif mode == 'blacklist' then
+        local bl = {}
+        for _, name in ipairs(rvConfig.blacklist or {}) do bl[name] = true end
+        allowed = not bl[resourceName]
+    end
+    if not allowed then
+        local reason = ReasonCodes.ResourceEvent.UNAUTH_START
+        Log(("^1[NexusGuard Resource][%s] Unauthorized resource start detected: %s^7"):format(reason, resourceName), 1)
+        if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+            NexusGuardServer.Detections.Process(0, "UnauthorizedResourceStart", {
+                value = resourceName,
+                details = { resource = resourceName },
+                reasonCode = reason,
+                clientValidated = false,
+                serverValidated = true
+            }, { metrics = {} })
+        end
+    end
+end
+
+--[[
+    Handles resource stop events after initial load.
+    @param resourceName (string): Name of the resource that stopped.
+]]
+function EventHandlers.HandleResourceStop(resourceName)
+    local rvConfig = NexusGuardServer.Config and NexusGuardServer.Config.Features and NexusGuardServer.Config.Features.resourceVerification
+    if not rvConfig or not rvConfig.enabled then return end
+    local reason = ReasonCodes.ResourceEvent.UNAUTH_STOP
+    Log(("^1[NexusGuard Resource][%s] Resource stopped: %s^7"):format(reason, resourceName), 1)
+    if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+        NexusGuardServer.Detections.Process(0, "UnauthorizedResourceStop", {
+            value = resourceName,
+            details = { resource = resourceName },
+            reasonCode = reason,
+            clientValidated = false,
+            serverValidated = true
+        }, { metrics = {} })
+    end
 end
 
 --[[

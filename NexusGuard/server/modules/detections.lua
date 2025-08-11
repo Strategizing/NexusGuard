@@ -694,6 +694,31 @@ function Detections.Process(playerId, detectionType, detectionData, session)
         end
          validatedData.serverValidated = isValid
 
+    -- Weapon damage mismatch validation
+    elseif detectionType == "WeaponDamageMismatch" then
+        local actual = tonumber(validatedData.value)
+        local expected = tonumber(validatedData.details and validatedData.details.expected)
+        if actual and expected and actual > expected then
+            isValid = true
+            severity = "High"
+            validatedData.reason = string.format("Weapon damage %.2f exceeded expected %.2f", actual, expected)
+        end
+        validatedData.serverValidated = isValid
+
+    -- Entity creation blacklist validation
+    elseif detectionType == "BlacklistedEntity" then
+        isValid = true
+        severity = "High"
+        validatedData.reason = "Blacklisted entity created"
+        validatedData.serverValidated = true
+
+    -- Unauthorized resource start/stop validation
+    elseif detectionType == "UnauthorizedResourceStart" or detectionType == "UnauthorizedResourceStop" then
+        isValid = true
+        severity = "Critical"
+        validatedData.reason = string.format("Resource %s %s", tostring(validatedData.value), detectionType == "UnauthorizedResourceStart" and "started" or "stopped")
+        validatedData.serverValidated = true
+
     -- Resource Mismatch Validation
     elseif detectionType == "ResourceMismatch" then
         -- This detection is generated server-side during the resource check, so it's inherently validated.

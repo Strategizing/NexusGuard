@@ -75,11 +75,30 @@ AddEventHandler('explosionEvent', function(sender, ev)
     end
 end)
 
+-- weaponDamageEvent: Validates weapon damage against server configuration.
+AddEventHandler('weaponDamageEvent', function(sender, ev)
+    local source = tonumber(sender)
+    local session = NexusGuardServer.GetSession(source)
+    if NexusGuardServer.EventHandlers and NexusGuardServer.EventHandlers.HandleWeaponDamage then
+        NexusGuardServer.EventHandlers.HandleWeaponDamage(sender, ev, session)
+    else
+        Log(("^1[NexusGuard] HandleWeaponDamage function not found in API for event from sender %s.^7"):format(tostring(sender)), 1)
+    end
+end)
+
+-- entityCreating: Blocks creation of blacklisted entities.
+AddEventHandler('entityCreating', function(entity)
+    if NexusGuardServer.EventHandlers and NexusGuardServer.EventHandlers.HandleEntityCreation then
+        NexusGuardServer.EventHandlers.HandleEntityCreation(entity)
+    end
+end)
+
 --[[
     Local State Management
 ]]
 -- Tracks clients that have successfully requested and received a security token.
 local ClientsLoaded = {}
+local ResourceMonitorActive = false
 
 --[[ Player Session Management is now handled by NexusGuardServer.GetSession and NexusGuardServer.CleanupSession in globals.lua ]]
 
@@ -88,60 +107,74 @@ local ClientsLoaded = {}
     Performs setup tasks when the NexusGuard resource starts.
 ]]
 AddEventHandler('onResourceStart', function(resourceName)
-    -- Ensure this runs only for the NexusGuard resource itself.
-    if resourceName ~= GetCurrentResourceName() then return end
+    if resourceName == GetCurrentResourceName() then
+        -- Double-check that the API table loaded correctly.
+        if not NexusGuardServer or not NexusGuardServer.Utils or not NexusGuardServer.Utils.Log then
+            print("^1[NexusGuard] CRITICAL: NexusGuardServer API or required modules not loaded correctly during onResourceStart. Initialization aborted.^7")
+            return
+        end
+        Log('^2[NexusGuard]^7 Initializing NexusGuard Anti-Cheat System (Server)...', 2)
 
-    -- Double-check that the API table loaded correctly.
-    if not NexusGuardServer or not NexusGuardServer.Utils or not NexusGuardServer.Utils.Log then
-        print("^1[NexusGuard] CRITICAL: NexusGuardServer API or required modules not loaded correctly during onResourceStart. Initialization aborted.^7")
-        return
-    end
-    Log('^2[NexusGuard]^7 Initializing NexusGuard Anti-Cheat System (Server)...', 2)
+        -- Perform Dependency Checks using API references where possible.
+        -- Check for oxmysql (MySQL object is global, exposed by oxmysql).
+        if not MySQL then
+            Log("^1[NexusGuard] CRITICAL: MySQL object not found. Ensure 'oxmysql' is started BEFORE NexusGuard. Disabling database features.^7", 1)
+            -- Attempt to disable DB features via Config if accessible through API.
+            if NexusGuardServer.Config and NexusGuardServer.Config.Database then
+                NexusGuardServer.Config.Database.enabled = false
+            end
+        end
+        -- Check for ox_lib crypto functions (lib is global, exposed by ox_lib).
+        if not lib or not lib.crypto or not lib.crypto.hmac then
+             Log("^1[NexusGuard] CRITICAL: ox_lib crypto functions not found (lib.crypto.hmac). Ensure 'ox_lib' is started BEFORE NexusGuard and is up-to-date. Security token system will fail.^7", 1)
+             -- Consider halting resource start if security is critical and ox_lib is missing.
+             -- return
+        end
 
-    -- Perform Dependency Checks using API references where possible.
-    -- Check for oxmysql (MySQL object is global, exposed by oxmysql).
-    if not MySQL then
-        Log("^1[NexusGuard] CRITICAL: MySQL object not found. Ensure 'oxmysql' is started BEFORE NexusGuard. Disabling database features.^7", 1)
-        -- Attempt to disable DB features via Config if accessible through API.
-        if NexusGuardServer.Config and NexusGuardServer.Config.Database then
-            NexusGuardServer.Config.Database.enabled = false
+        -- Ensure the Config table loaded from config.lua is accessible via the API table.
+        -- _G.Config should have been loaded by `shared_scripts` in fxmanifest.lua.
+        NexusGuardServer.Config = _G.Config or {}
+        if not _G.Config then
+            Log("^1[NexusGuard] CRITICAL: Global Config table not found. Ensure config.lua is loaded correctly via shared_scripts.^7", 1)
+        else
+            Log("^2[NexusGuard]^7 Configuration table loaded and referenced in API.^7", 2)
+        end
+
+        -- Load the initial ban list from the database using the Bans module via API.
+        if NexusGuardServer.Bans and NexusGuardServer.Bans.LoadList then
+            NexusGuardServer.Bans.LoadList(true) -- `true` forces reload on start.
+        else
+            Log("^1[NexusGuard] CRITICAL: Bans.LoadList function not found in API! Ban checks will fail.^7", 1)
+        end
+
+        -- Setup local scheduled tasks (defined later in this file).
+        SetupScheduledTasks()
+
+        -- Register server-side network event handlers using EventRegistry (defined later in this file).
+        if EventRegistry then
+            RegisterNexusGuardServerEvents()
+            Log("^2[NexusGuard]^7 Server network event handlers registered via EventRegistry.^7", 2)
+        else
+            Log("^1[NexusGuard] CRITICAL: EventRegistry module not loaded! Cannot register server network event handlers. NexusGuard will not function.^7", 1)
+        end
+
+        Log("^2[NexusGuard]^7 Server initialization sequence complete.^7", 2)
+
+        SetTimeout(5000, function() ResourceMonitorActive = true end)
+    else
+        if ResourceMonitorActive and NexusGuardServer.EventHandlers and NexusGuardServer.EventHandlers.HandleResourceStart then
+            NexusGuardServer.EventHandlers.HandleResourceStart(resourceName)
         end
     end
-    -- Check for ox_lib crypto functions (lib is global, exposed by ox_lib).
-    if not lib or not lib.crypto or not lib.crypto.hmac then
-         Log("^1[NexusGuard] CRITICAL: ox_lib crypto functions not found (lib.crypto.hmac). Ensure 'ox_lib' is started BEFORE NexusGuard and is up-to-date. Security token system will fail.^7", 1)
-         -- Consider halting resource start if security is critical and ox_lib is missing.
-         -- return
+end)
+
+-- Monitor unexpected resource stops after initialization
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() and ResourceMonitorActive then
+        if NexusGuardServer.EventHandlers and NexusGuardServer.EventHandlers.HandleResourceStop then
+            NexusGuardServer.EventHandlers.HandleResourceStop(resourceName)
+        end
     end
-
-    -- Ensure the Config table loaded from config.lua is accessible via the API table.
-    -- _G.Config should have been loaded by `shared_scripts` in fxmanifest.lua.
-    NexusGuardServer.Config = _G.Config or {}
-    if not _G.Config then
-        Log("^1[NexusGuard] CRITICAL: Global Config table not found. Ensure config.lua is loaded correctly via shared_scripts.^7", 1)
-    else
-        Log("^2[NexusGuard]^7 Configuration table loaded and referenced in API.^7", 2)
-    end
-
-    -- Load the initial ban list from the database using the Bans module via API.
-    if NexusGuardServer.Bans and NexusGuardServer.Bans.LoadList then
-        NexusGuardServer.Bans.LoadList(true) -- `true` forces reload on start.
-    else
-        Log("^1[NexusGuard] CRITICAL: Bans.LoadList function not found in API! Ban checks will fail.^7", 1)
-    end
-
-    -- Setup local scheduled tasks (defined later in this file).
-    SetupScheduledTasks()
-
-    -- Register server-side network event handlers using EventRegistry (defined later in this file).
-    if EventRegistry then
-        RegisterNexusGuardServerEvents()
-        Log("^2[NexusGuard]^7 Server network event handlers registered via EventRegistry.^7", 2)
-    else
-        Log("^1[NexusGuard] CRITICAL: EventRegistry module not loaded! Cannot register server network event handlers. NexusGuard will not function.^7", 1)
-    end
-
-    Log("^2[NexusGuard]^7 Server initialization sequence complete.^7", 2)
 end)
 
 --[[
