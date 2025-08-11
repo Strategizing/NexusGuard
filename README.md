@@ -41,7 +41,7 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
     *   Ensure your `oxmysql` resource is correctly configured to connect to your database.
 5.  **Configure `config.lua`:**
     *   Carefully review **all** options in `config.lua`. Pay close attention to comments indicating required fields or critical settings.
-    *   **CRITICAL:** Set `Config.SecuritySecret` to a **long, unique, and random string**. This secret is used by the default secure token implementation (HMAC-SHA256). **Do not leave the default value or share it.**
+    *   **CRITICAL:** Set `Config.SecuritySecret` to a **long, unique, and random string**. This secret is used by the default secure token implementation (HMAC-SHA256). **Do not leave the default value or share it.** NexusGuard will stop during startup if this value is missing or left as the placeholder.
     *   **Set `Config.PermissionsFramework`:** Choose `"ace"`, `"esx"`, `"qbcore"`, or `"custom"` based on your server's permission system. See comments in `config.lua`.
     *   **Configure `Config.AdminGroups`:** List the group/permission names that should be considered admin *according to the framework selected above*. (e.g., for ACE: `"admin"`, `"superadmin"`; for ESX: `"admin"`, `"superadmin"`; for QBCore: `"admin"`, `"god"`, etc.).
     *   Fill in required URLs/IDs if features are enabled: `Config.DiscordWebhook` (for general logs), specific webhook URLs in `Config.Discord.webhooks` (optional), `Config.ScreenCapture.webhookURL`, `Config.Discord.RichPresence.AppId`.
@@ -56,7 +56,7 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 ## Configuration Deep Dive
 
 *   **`config.lua`**: Contains all user-configurable settings. Read the comments carefully.
-*   **`Config.SecuritySecret`**: **MUST BE CHANGED** to a strong, unique secret. This is used by the default secure token system.
+*   **`Config.SecuritySecret`**: **MUST BE CHANGED** to a strong, unique secret. This is used by the default secure token system. NexusGuard validates this on startup and will stop if the secret is empty or left as the placeholder.
 *   **Security Implementation**: A default secure token system using HMAC-SHA256 (via `ox_lib`) with built-in anti-replay protection is now included. Ensure `ox_lib` is installed and `Config.SecuritySecret` is set correctly.
 *   **Permissions**: Configure `Config.PermissionsFramework` and `Config.AdminGroups` in `config.lua`. You only need to edit `globals.lua` if using the `"custom"` framework setting.
 *   **Resource Verification**: The logic is implemented, but if enabled, the `whitelist` or `blacklist` in `config.lua` **MUST BE CONFIGURED ACCURATELY**. Whitelist mode is dangerous if not all required resources are listed.
@@ -76,7 +76,7 @@ NexusGuard is a modular, event-driven anti-cheat framework designed for FiveM se
 ## Common Issues & Troubleshooting
 
 *   **CRITICAL: `Config.SecuritySecret` Error / Invalid Token Errors:**
-    *   **Cause:** You haven't changed `Config.SecuritySecret` in `config.lua` from the default value, or `ox_lib` is not started *before* NexusGuard.
+    *   **Cause:** You haven't changed `Config.SecuritySecret` in `config.lua` from the default value, or `ox_lib` is not started *before* NexusGuard. NexusGuard will stop during startup if the secret is missing or placeholder.
     *   **Solution:**
         1.  **STOP YOUR SERVER.**
         2.  Open `config.lua` and set `Config.SecuritySecret` to a **long, unique, random string** (e.g., use a password generator). **DO NOT SHARE THIS SECRET.**

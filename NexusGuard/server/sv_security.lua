@@ -47,7 +47,11 @@ local Security = {
         tokensFailed = 0,
         replayAttempts = 0,
         lastResetTime = os.time()
-    }
+    },
+
+    -- Indicates whether the security subsystem is active. If false, token
+    -- generation/validation will be disabled to prevent insecure operation.
+    isActive = true
 }
 
 --[[
@@ -62,6 +66,24 @@ local Security = {
 function Security.Initialize(cfg, logFunc)
     Config = cfg or {} -- Store config reference
     Log = logFunc or function(...) print("[Security Fallback Log]", ...) end -- Store log function reference
+
+    -- Validate security secret early to prevent insecure startup
+    local secret = Config.SecuritySecret
+    if not secret or secret == "" or secret == "CHANGE_THIS_TO_A_LONG_RANDOM_STRING" or secret == "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" then
+        Log("^1SECURITY CRITICAL: Config.SecuritySecret is missing, empty, or default. Stopping resource.^7", 1)
+        Security.isActive = false
+
+        -- Attempt to stop this resource to prevent insecure operation
+        local resName = type(GetCurrentResourceName) == 'function' and GetCurrentResourceName() or nil
+        if resName then
+            if type(StopResource) == 'function' then
+                StopResource(resName)
+            elseif Natives and Natives.ExecuteCommand then
+                Natives.ExecuteCommand("stop " .. resName)
+            end
+        end
+        return false
+    end
 
     -- Initialize the dependency manager
     Dependencies.Initialize(Log)
@@ -90,6 +112,9 @@ end
                            (e.g., missing crypto library or security secret).
 ]]
 function Security.GenerateToken(playerId)
+    if not Security.isActive then
+        return nil
+    end
     -- Validate player ID
     if not playerId or playerId <= 0 then
         Log("^1SECURITY ERROR: Invalid player ID provided to GenerateToken.^7", 1)
@@ -176,6 +201,9 @@ end
     @return (boolean): True if the token is valid and has not been replayed, false otherwise.
 ]]
 function Security.ValidateToken(playerId, tokenData)
+    if not Security.isActive then
+        return false
+    end
     -- Validate player ID
     if not playerId or playerId <= 0 then
         Log("^1SECURITY ERROR: Invalid player ID provided to ValidateToken.^7", 1)
