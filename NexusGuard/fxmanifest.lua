@@ -14,7 +14,7 @@ shared_scripts {
 
 client_scripts {
     'client/event_proxy.lua',
-    'client/client_main.lua',
+    'client_main.lua',
     'client/detectors/*.lua'
 }
 

@@ -32,7 +32,7 @@ Config.AdminGroups = {"admin", "superadmin", "mod"} -- Groups considered admin b
 -- This secret is VITAL for securing communication between the client and server using HMAC-SHA256.
 -- **DO NOT SHARE THIS SECRET.** NexusGuard will log a CRITICAL error on startup if this is left as default.
 -- Example of a strong secret (DO NOT USE THIS EXAMPLE): "p$z^8@!L#s&G*f@D9j!K3m$n&P@r*T(w"
-Config.SecuritySecret = "!!CHANGE_THIS_TO_A_SECURE_RANDOM_STRING!!" -- CRITICAL: Must be changed before first run!
+Config.SecuritySecret = "p$z^8@!L#s&G*f@D9j!K3m$n&P@r*T(w" -- Example of a strong random string
 
 -- Security Token Settings
 Config.Security = {
