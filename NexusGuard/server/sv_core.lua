@@ -104,6 +104,7 @@ function Core.LoadModules()
         "Database",
         "Bans",
         "Discord",
+        "PlayerMetrics",
         "Detections",
         "EventHandlers"
     }
@@ -115,15 +116,6 @@ function Core.LoadModules()
             return require('server/sv_' .. string.lower(moduleName))
         end)
 
-        if not success then
-            -- Special case for Detections which is in a subdirectory
-            if moduleName == "Detections" then
-                success, module = pcall(function()
-                    return require('server/modules/detections')
-                end)
-            end
-        end
-
         if success and module then
             -- Store the module reference
             Core.modules[moduleName] = module
@@ -131,7 +123,7 @@ function Core.LoadModules()
             -- Initialize the module if it has an Initialize function
             if type(module.Initialize) == "function" then
                 local initSuccess, err = pcall(function()
-                    module.Initialize(Config, Log)
+                    module.Initialize(Config, Log, Core)
                 end)
 
                 if not initSuccess then

@@ -25,7 +25,7 @@ local Dependencies = require('shared/dependency_manager') -- Load the dependency
 local Log -- Local alias for Log, set during Initialize
 
 -- Local reference to the Config table, set during Initialize
-local Config = nil
+local Config, Core = nil, nil
 
 local SessionManager = {
     -- Central storage for all player sessions
@@ -48,9 +48,10 @@ local SessionManager = {
     @param cfg (table): The main Config table.
     @param logFunc (function): The logging function (Utils.Log).
 ]]
-function SessionManager.Initialize(cfg, logFunc)
-    Config = cfg or {} -- Store config reference
-    Log = logFunc or function(...) print("[SessionManager Fallback Log]", ...) end -- Store log function reference
+function SessionManager.Initialize(cfg, logFunc, core)
+    Config = cfg or {}
+    Log = logFunc or function(...) print("[SessionManager Fallback Log]", ...) end
+    Core = core
 
     -- Initialize the dependency manager
     Dependencies.Initialize(Log)
@@ -234,10 +235,11 @@ function SessionManager.CleanupSession(playerId)
 
     -- Save metrics to database if configured and available
     if Config.Database and Config.Database.enabled and Dependencies.Database.IsAvailable() then
-        -- Try to save metrics using the global API if available
+        -- Try to save metrics using the Database module if available
         local success, result = pcall(function()
-            if _G.NexusGuardServer and _G.NexusGuardServer.Database and type(_G.NexusGuardServer.Database.SavePlayerMetrics) == "function" then
-                return _G.NexusGuardServer.Database.SavePlayerMetrics(playerId, session.metrics)
+            local Database = Core and Core.GetModule and Core.GetModule('Database')
+            if Database and type(Database.SavePlayerMetrics) == 'function' then
+                return Database.SavePlayerMetrics(playerId, session.metrics)
             end
             return false
         end)

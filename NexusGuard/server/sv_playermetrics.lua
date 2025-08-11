@@ -1,5 +1,9 @@
 local Metrics = {}
-local Core = exports["NexusGuard"]:GetCore()
+local Core
+
+function Metrics.Initialize(_, _, core)
+    Core = core
+end
 
 -- Initialize player metrics when they join
 function Metrics.InitializePlayer(playerId)
