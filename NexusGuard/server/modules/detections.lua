@@ -797,13 +797,19 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
         end
     end
 
-    -- Skip checks during the initial spawn grace period.
+    -- Skip checks during the spawn/respawn grace period.
+    local currentServerTime = Natives.GetGameTimer()
     if session.metrics.justSpawned then
-        -- Still update the position to prevent large jump detection immediately after grace period ends.
-        session.metrics.lastServerPosition = currentPos
-        session.metrics.lastServerPositionTimestamp = Natives.GetGameTimer()
-        session.metrics.lastValidPosition = currentPos -- Assume spawn position is valid initially.
-        return -- Skip validation during grace period.
+        -- Honour any configured grace timeout before enabling speed checks again.
+        if session.metrics.spawnGraceEnd and currentServerTime < session.metrics.spawnGraceEnd then
+            session.metrics.lastServerPosition = currentPos
+            session.metrics.lastServerPositionTimestamp = currentServerTime
+            session.metrics.lastValidPosition = currentPos -- Assume spawn position is valid initially.
+            return -- Skip validation during grace period.
+        else
+            session.metrics.justSpawned = false
+            session.metrics.spawnGraceEnd = nil
+        end
     end
 
     -- Skip checks if player just teleported (e.g., via admin command)
@@ -882,12 +888,13 @@ function Detections.ValidatePositionUpdate(playerId, currentPos, clientTimestamp
             local reasonSuffix = ""
 
             -- Check for special movement states that justify higher speeds
+            local vertVel = session.metrics.verticalVelocity or 0.0
             if session.metrics.isFalling or session.metrics.isRagdoll or session.metrics.isInParachute or
-               (session.metrics.verticalVelocity and session.metrics.verticalVelocity < -10.0) or
+               math.abs(vertVel) > 10.0 or
                session.metrics.isGettingUp or session.metrics.isClimbing or session.metrics.isVaulting or
                session.metrics.isJumping then
                 effectiveSpeedThreshold = serverSpeedThreshold * 2.5
-                reasonSuffix = " (Adjusted for movement state)"
+                reasonSuffix = string.format(" (Adjusted for movement state, vertVel %.1f)", vertVel)
             elseif session.metrics.isInVehicle then
                 -- Get vehicle model and adjust threshold based on vehicle type
                 local ped = Natives.GetPlayerPed(playerId)

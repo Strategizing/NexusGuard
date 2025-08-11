@@ -668,15 +668,23 @@ if lastPos and lastTime then
 local timeDiff = currentTime - lastTime
 local minDiff = (NexusGuardServer.Config.Thresholds and NexusGuardServer.Config.Thresholds.minTimeDiffPositionCheck) or 450
 if timeDiff >= minDiff then
-local distance = #(currentPos - lastPos)
-local speed = timeDiff > 0 and (distance / (timeDiff / 1000.0)) or 0.0
+local dx = currentPos.x - lastPos.x
+local dy = currentPos.y - lastPos.y
+local dz = currentPos.z - lastPos.z
+local horizontalDistance = math.sqrt(dx * dx + dy * dy)
+local speed = timeDiff > 0 and (horizontalDistance / (timeDiff / 1000.0)) or 0.0
 local speedThreshold = NexusGuardServer.Config.serverSideSpeedThreshold or 50.0
+-- Increase threshold when vertical velocity suggests falling or parachuting
+local vertSpeed = dz / (timeDiff / 1000.0)
+if math.abs(vertSpeed) > 10.0 then
+    speedThreshold = speedThreshold * 2.5
+end
 if speed > speedThreshold then
 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
 NexusGuardServer.Detections.Process(source, "ServerSpeedCheck", {
 speed = speed,
 threshold = speedThreshold,
-distance = distance,
+distance = horizontalDistance,
 timeDiff = timeDiff,
 serverValidated = true
 }, session)
@@ -784,8 +792,15 @@ local timeDiff = currentTime - lastHealthTime
 if timeDiff > 0 then
 local regenRate = (currentHealth - lastHealth) / (timeDiff / 1000.0)
 local regenThreshold = NexusGuardServer.Config.serverSideRegenThreshold or 3.0
+-- Track consecutive violations to make the check less sensitive
+session.metrics.regenViolationCount = session.metrics.regenViolationCount or 0
 if regenRate > regenThreshold then
-if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
+    session.metrics.regenViolationCount = session.metrics.regenViolationCount + 1
+else
+    session.metrics.regenViolationCount = 0
+end
+if session.metrics.regenViolationCount >= 2 then
+    if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
 NexusGuardServer.Detections.Process(source, "ServerHealthRegenCheck", {
 rate = regenRate,
 increase = currentHealth - lastHealth,
@@ -793,9 +808,10 @@ threshold = regenThreshold,
 timeDiff = timeDiff,
 serverValidated = true
 }, session)
-else
+    else
 Log(("^1[NexusGuard] Health regen %.2f HP/s exceeded threshold %.2f for %s (ID: %d)^7"):format(regenRate, regenThreshold, playerName, source), 1)
-end
+    end
+    session.metrics.regenViolationCount = 0
 end
 end
 end
