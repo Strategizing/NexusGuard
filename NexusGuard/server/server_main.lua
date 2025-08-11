@@ -295,6 +295,13 @@ function RegisterNexusGuardServerEvents()
             -- Generate a security token using the Security module via API.
             local tokenData = NexusGuardServer.Security and NexusGuardServer.Security.GenerateToken and NexusGuardServer.Security.GenerateToken(source)
             if tokenData and tokenData.nonce then
+                -- Generate a per-player challenge token
+                if NexusGuardServer.Security.GenerateChallengeToken then
+                    local challenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+                    if challenge then
+                        tokenData.challenge = challenge
+                    end
+                end
                 -- Send the generated token data back to the requesting client.
                 EventRegistry:TriggerClientEvent('SECURITY_RECEIVE_TOKEN', source, tokenData)
                 Log(("^2[NexusGuard]^7 Secure token sent to %s (ID: %d) via event '%s'^7"):format(playerName, source, EventRegistry:GetEventName('SECURITY_RECEIVE_TOKEN')), 2)
@@ -331,6 +338,23 @@ function RegisterNexusGuardServerEvents()
                 DropPlayer(source, "Anti-Cheat validation failed (Invalid Detection Token).")
             end
             return -- Stop processing if token is invalid.
+        end
+        -- Verify challenge token
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.VerifyChallengeResponse or not NexusGuardServer.Security.VerifyChallengeResponse(source, tokenData and tokenData.challenge) then
+            Log(("^1[NexusGuard] Invalid challenge token with detection report from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
+                NexusGuardServer.Bans.Execute(source, 'Invalid challenge token with detection report')
+            else
+                DropPlayer(source, "Anti-Cheat validation failed (Detection Challenge).")
+            end
+            return
+        end
+        -- Issue new challenge token
+        if NexusGuardServer.Security and NexusGuardServer.Security.GenerateChallengeToken then
+            local newChallenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+            if newChallenge then
+                EventRegistry:TriggerClientEvent('SECURITY_NEW_CHALLENGE', source, newChallenge)
+            end
         end
 
         -- Retrieve the player's session data via API.
@@ -377,6 +401,21 @@ function RegisterNexusGuardServerEvents()
                 DropPlayer(source, "Anti-Cheat validation failed (Resource Check Token).")
             end
             return
+        end
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.VerifyChallengeResponse or not NexusGuardServer.Security.VerifyChallengeResponse(source, tokenData and tokenData.challenge) then
+            Log(("^1[NexusGuard] Invalid challenge token with resource check from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans and NexusGuardServer.Bans.Execute then
+                NexusGuardServer.Bans.Execute(source, 'Invalid challenge token during resource check')
+            else
+                DropPlayer(source, "Anti-Cheat validation failed (Resource Challenge).")
+            end
+            return
+        end
+        if NexusGuardServer.Security and NexusGuardServer.Security.GenerateChallengeToken then
+            local newChallenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+            if newChallenge then
+                EventRegistry:TriggerClientEvent('SECURITY_NEW_CHALLENGE', source, newChallenge)
+            end
         end
 
         -- Validate the format of the received resource list.
@@ -481,6 +520,16 @@ function RegisterNexusGuardServerEvents()
             Log(("^1[NexusGuard]^7 Invalid security token received with error report from %s (ID: %d). Ignoring report.^7"):format(playerName, source), 1)
             return -- Ignore report if token is invalid.
         end
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.VerifyChallengeResponse or not NexusGuardServer.Security.VerifyChallengeResponse(source, tokenData and tokenData.challenge) then
+            Log(("^1[NexusGuard]^7 Invalid challenge token received with error report from %s (ID: %d). Ignoring report.^7"):format(playerName, source), 1)
+            return
+        end
+        if NexusGuardServer.Security and NexusGuardServer.Security.GenerateChallengeToken then
+            local newChallenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+            if newChallenge then
+                EventRegistry:TriggerClientEvent('SECURITY_NEW_CHALLENGE', source, newChallenge)
+            end
+        end
 
         -- Log the reported client error.
         Log(("^3[NexusGuard]^7 Client error reported by %s (ID: %d) in module '%s': %s^7"):format(playerName, source, tostring(detectionName), tostring(errorMessage)), 2)
@@ -508,6 +557,17 @@ function RegisterNexusGuardServerEvents()
             Log(("^1[NexusGuard] Invalid security token received with screenshot failure from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
             if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with screenshot failure') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Failure Token).") end
             return
+        end
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.VerifyChallengeResponse or not NexusGuardServer.Security.VerifyChallengeResponse(source, tokenData and tokenData.challenge) then
+            Log(("^1[NexusGuard] Invalid challenge token received with screenshot failure from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid challenge token with screenshot failure') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Failure Challenge).") end
+            return
+        end
+        if NexusGuardServer.Security and NexusGuardServer.Security.GenerateChallengeToken then
+            local newChallenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+            if newChallenge then
+                EventRegistry:TriggerClientEvent('SECURITY_NEW_CHALLENGE', source, newChallenge)
+            end
         end
 
         -- Validate error message format.
@@ -540,6 +600,17 @@ function RegisterNexusGuardServerEvents()
             if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with screenshot confirmation') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Confirmation Token).") end
             return
         end
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.VerifyChallengeResponse or not NexusGuardServer.Security.VerifyChallengeResponse(source, tokenData and tokenData.challenge) then
+            Log(("^1[NexusGuard] Invalid challenge token received with screenshot confirmation from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid challenge token with screenshot confirmation') else DropPlayer(source, "Anti-Cheat validation failed (Screenshot Confirmation Challenge).") end
+            return
+        end
+        if NexusGuardServer.Security and NexusGuardServer.Security.GenerateChallengeToken then
+            local newChallenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+            if newChallenge then
+                EventRegistry:TriggerClientEvent('SECURITY_NEW_CHALLENGE', source, newChallenge)
+            end
+        end
 
         -- Validate screenshot URL format.
         if type(screenshotUrl) ~= "string" or screenshotUrl == "" then
@@ -569,6 +640,17 @@ function RegisterNexusGuardServerEvents()
             Log(("^1[NexusGuard] Invalid security token with position update from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
             if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with position update') else DropPlayer(source, "Anti-Cheat validation failed (Position Update Token).") end
             return
+        end
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.VerifyChallengeResponse or not NexusGuardServer.Security.VerifyChallengeResponse(source, tokenData and tokenData.challenge) then
+            Log(("^1[NexusGuard] Invalid challenge token with position update from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid challenge token with position update') else DropPlayer(source, "Anti-Cheat validation failed (Position Challenge).") end
+            return
+        end
+        if NexusGuardServer.Security and NexusGuardServer.Security.GenerateChallengeToken then
+            local newChallenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+            if newChallenge then
+                EventRegistry:TriggerClientEvent('SECURITY_NEW_CHALLENGE', source, newChallenge)
+            end
         end
 
         -- Retrieve player session via API.
@@ -671,6 +753,10 @@ if timeDiff >= minDiff then
 local distance = #(currentPos - lastPos)
 local speed = timeDiff > 0 and (distance / (timeDiff / 1000.0)) or 0.0
 local speedThreshold = NexusGuardServer.Config.serverSideSpeedThreshold or 50.0
+if session.metrics and session.metrics.isFalling then
+local mult = NexusGuardServer.Config.fallingSpeedMultiplier or 1.5
+speedThreshold = speedThreshold * mult
+end
 if speed > speedThreshold then
 if NexusGuardServer.Detections and NexusGuardServer.Detections.Process then
 NexusGuardServer.Detections.Process(source, "ServerSpeedCheck", {
@@ -716,6 +802,17 @@ session.metrics.verticalVelocity = computedVerticalVel
             Log(("^1[NexusGuard] Invalid security token with health update from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
             if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with health update') else DropPlayer(source, "Anti-Cheat validation failed (Health Update Token).") end
             return
+        end
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.VerifyChallengeResponse or not NexusGuardServer.Security.VerifyChallengeResponse(source, tokenData and tokenData.challenge) then
+            Log(("^1[NexusGuard] Invalid challenge token with health update from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid challenge token with health update') else DropPlayer(source, "Anti-Cheat validation failed (Health Challenge).") end
+            return
+        end
+        if NexusGuardServer.Security and NexusGuardServer.Security.GenerateChallengeToken then
+            local newChallenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+            if newChallenge then
+                EventRegistry:TriggerClientEvent('SECURITY_NEW_CHALLENGE', source, newChallenge)
+            end
         end
 
         -- Retrieve player session via API.
@@ -852,6 +949,17 @@ session.metrics.lastServerHealthTimestamp = currentTime
             Log(("^1[NexusGuard] Invalid security token with weapon check from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
             if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid security token with weapon check') else DropPlayer(source, "Anti-Cheat validation failed (Weapon Check Token).") end
             return
+        end
+        if not NexusGuardServer.Security or not NexusGuardServer.Security.VerifyChallengeResponse or not NexusGuardServer.Security.VerifyChallengeResponse(source, tokenData and tokenData.challenge) then
+            Log(("^1[NexusGuard] Invalid challenge token with weapon check from %s (ID: %d). Banning player.^7"):format(playerName, source), 1)
+            if NexusGuardServer.Bans.Execute then NexusGuardServer.Bans.Execute(source, 'Invalid challenge token with weapon check') else DropPlayer(source, "Anti-Cheat validation failed (Weapon Challenge).") end
+            return
+        end
+        if NexusGuardServer.Security and NexusGuardServer.Security.GenerateChallengeToken then
+            local newChallenge = NexusGuardServer.Security.GenerateChallengeToken(source)
+            if newChallenge then
+                EventRegistry:TriggerClientEvent('SECURITY_NEW_CHALLENGE', source, newChallenge)
+            end
         end
 
         -- Retrieve player session via API.

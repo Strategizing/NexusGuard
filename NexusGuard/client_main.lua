@@ -81,6 +81,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     if EventRegistry then
         -- Register server-sent events that this client needs to listen for
         EventRegistry:RegisterEvent('SECURITY_RECEIVE_TOKEN')
+        EventRegistry:RegisterEvent('SECURITY_NEW_CHALLENGE')
         EventRegistry:RegisterEvent('ADMIN_NOTIFICATION')
         EventRegistry:RegisterEvent('ADMIN_REQUEST_SCREENSHOT')
         EventRegistry:RegisterEvent('NEXUSGUARD_POSITION_UPDATE') -- Server -> Client position updates (if server sends them)
@@ -563,7 +564,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     ]]
     function NexusGuardInstance:SendPositionUpdate()
         -- Prevent sending updates before initialization or without a valid security token.
-        if not self.initialized or not self.securityToken or type(self.securityToken) ~= "table" then
+        if not self.initialized or not self.securityToken or type(self.securityToken) ~= "table" or not self.securityToken.challenge then
             -- print("^3[NexusGuard] SendPositionUpdate skipped: Not initialized or no valid security token.^7") -- Reduce log spam
             return
         end
@@ -583,7 +584,14 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         if EventRegistry then
             -- The event key 'NEXUSGUARD_POSITION_UPDATE' should map to the correct server-side event name
             -- defined in shared/event_registry.lua (e.g., 'nexusguard:server:positionUpdate').
-            EventRegistry:TriggerServerEvent('NEXUSGUARD_POSITION_UPDATE', currentPos, currentTimestamp, self.securityToken)
+            local token = {
+                timestamp = self.securityToken.timestamp,
+                nonce = self.securityToken.nonce,
+                signature = self.securityToken.signature,
+                challenge = self.securityToken.challenge
+            }
+            self.securityToken.challenge = nil
+            EventRegistry:TriggerServerEvent('NEXUSGUARD_POSITION_UPDATE', currentPos, currentTimestamp, token)
         else
             print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot send position update to server.^7")
         end
@@ -595,7 +603,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     ]]
     function NexusGuardInstance:SendHealthUpdate()
         -- Prevent sending updates before initialization or without a valid security token.
-        if not self.initialized or not self.securityToken or type(self.securityToken) ~= "table" then
+        if not self.initialized or not self.securityToken or type(self.securityToken) ~= "table" or not self.securityToken.challenge then
             return
         end
 
@@ -615,7 +623,14 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
         -- Send health/armor data and the security token table to the server via EventRegistry.
         if EventRegistry then
             -- Similar to position update, ensure 'NEXUSGUARD_HEALTH_UPDATE' maps correctly in event_registry.lua.
-            EventRegistry:TriggerServerEvent('NEXUSGUARD_HEALTH_UPDATE', currentHealth, currentArmor, currentTimestamp, self.securityToken)
+            local token = {
+                timestamp = self.securityToken.timestamp,
+                nonce = self.securityToken.nonce,
+                signature = self.securityToken.signature,
+                challenge = self.securityToken.challenge
+            }
+            self.securityToken.challenge = nil
+            EventRegistry:TriggerServerEvent('NEXUSGUARD_HEALTH_UPDATE', currentHealth, currentArmor, currentTimestamp, token)
         else
             print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot send health update to server.^7")
         end
@@ -628,7 +643,7 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
     ]]
     function NexusGuardInstance:ReportCheat(detectionType, details)
         -- Prevent reporting before initialization or without a valid security token.
-        if not self.initialized or not self.securityToken or type(self.securityToken) ~= "table" then
+        if not self.initialized or not self.securityToken or type(self.securityToken) ~= "table" or not self.securityToken.challenge then
             print("^3[NexusGuard] ReportCheat skipped: Not initialized or no valid security token.^7")
             return
         end
@@ -658,8 +673,15 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
             -- For subsequent detections after the initial warning, report directly to the server.
             print(("^1[NexusGuard] Reporting Detection to Server - Type: %s, Details: %s^7"):format(tostring(detectionType), tostring(details)))
             if EventProxy then
+                local token = {
+                    timestamp = self.securityToken.timestamp,
+                    nonce = self.securityToken.nonce,
+                    signature = self.securityToken.signature,
+                    challenge = self.securityToken.challenge
+                }
+                self.securityToken.challenge = nil
                 -- Send the detection type, details, and the security token to the server for verification and action.
-                EventProxy:TriggerServer('DETECTION_REPORT', detectionType, details, self.securityToken)
+                EventProxy:TriggerServer('DETECTION_REPORT', detectionType, details, token)
             else
                 -- EventProxy is essential for server communication.
                 print("^1[NexusGuard] CRITICAL: EventProxy module not loaded. Cannot report detection to server.^7")
@@ -693,6 +715,21 @@ local isDebugEnvironment = type(Citizen) ~= "table" or type(Citizen.CreateThread
              print("^1[NexusGuard] CRITICAL: Could not get event name for SECURITY_RECEIVE_TOKEN from EventRegistry. Cannot register handler.^7")
         else
              print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot register SECURITY_RECEIVE_TOKEN handler.^7")
+        end
+    end
+
+    local newChallengeEvent = EventRegistry and EventRegistry:GetEventName('SECURITY_NEW_CHALLENGE')
+    if newChallengeEvent then
+        AddEventHandler(newChallengeEvent, function(challenge)
+            if NexusGuardInstance.securityToken then
+                NexusGuardInstance.securityToken.challenge = challenge
+            end
+        end)
+    else
+        if EventRegistry then
+            print("^1[NexusGuard] CRITICAL: Could not get event name for SECURITY_NEW_CHALLENGE from EventRegistry.^7")
+        else
+            print("^1[NexusGuard] CRITICAL: EventRegistry module not loaded. Cannot register SECURITY_NEW_CHALLENGE handler.^7")
         end
     end
 
