@@ -1,0 +1,23 @@
+Here’s a concise refactor plan and a small code change to make your project a fully functional FiveM add‑on:
+
+### Key issues found
+
+* The project is already structured like a FiveM resource (with `fxmanifest.lua`, `client`, `server` and `shared` folders) and ships a modular anti‑cheat framework. However, the manifest mistakenly references the main client script as `client/client_main.lua` even though the file actually lives in the root of the resource.
+* Leaving this mismatch causes FiveM not to load your client‑side logic, so the anti‑cheat never runs properly.
+* The configuration file still contains default secrets and placeholder values that need to be changed.
+
+### What the refactor does
+
+1. **Fix the manifest** – The provided patch corrects the `client_scripts` section of `fxmanifest.lua` so FiveM loads the correct client entry point. Without this fix, your client logic won’t run.
+2. **Remove confusion** – After applying the patch, there is no need for a duplicate `client_main.lua` file. Consolidate your scripts to avoid duplicate copies.
+3. **Review configuration** – Before deploying, change `Config.SecuritySecret` in `config.lua` to a strong random string, adjust thresholds and detectors as needed, and ensure required dependencies (`oxmysql`, `screenshot-basic`, `ox_lib`) are installed.
+4. **Follow installation steps** – See the original README for detailed installation instructions. In short: extract the resource into your server’s `resources` folder, install dependencies, configure `server.cfg` to start them before NexusGuard, then `ensure NexusGuard`.
+
+### Deliverables
+
+* **Patch file** – Apply this diff in the root of your repository to fix the manifest: {{file\:file-Wc2nNNJZpf7L4TRFEkZkjf}}
+  You can apply it with `git apply fxmanifest_patch.diff` or edit the file manually as described.
+
+* **Refactor README** – A small README explaining what the patch does and how to apply it, along with extra recommendations, is included here: {{file\:file-JzEvPMDUdSdUeQ2BsTFwhG}}
+
+Once you apply the patch and update your configuration, restart your server. The anti‑cheat should now load both client and server components correctly, and your project will behave as a proper FiveM add‑on.
